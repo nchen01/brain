@@ -1,0 +1,13 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "queryreactor": {
+      "path": "src.workflow.graph:query_reactor_graph.graph",
+      "title": "QueryReactor Workflow",
+      "description": "Smart query and question-answering system with 13 specialized modules"
+    }
+  },
+  "env": ".env"
+}

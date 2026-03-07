@@ -1,0 +1,279 @@
+services:
+  # Main Brain MVP Application
+  brain-mvp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: brain-mvp-app
+    ports:
+      - "8088:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://brain_user:brain_password@postgres:5432/brain_mvp
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app/src
+      - PROCESSING__DEFAULT_CHUNKING_STRATEGY=${PROCESSING__DEFAULT_CHUNKING_STRATEGY:-recursive}
+      - PROCESSING__USE_EMBEDDINGS=${PROCESSING__USE_EMBEDDINGS:-false}
+      - PROCESSING__EMBEDDING_MODEL=${PROCESSING__EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      # Abbreviation expansion (expands acronyms before chunking for better RAG accuracy)
+      - PROCESSING__ENABLE_ABBREVIATION_EXPANSION=${PROCESSING__ENABLE_ABBREVIATION_EXPANSION:-true}
+      - PROCESSING__ABBREVIATION_CONFIDENCE_THRESHOLD=${PROCESSING__ABBREVIATION_CONFIDENCE_THRESHOLD:-0.7}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # MinerU API configuration (calls external MinerU service)
+      # Internal container network uses port 8080 regardless of external mapping
+      - MINERU_API_URL=http://mineru-api:8080
+      - MINERU_API_ENABLED=true
+      - MINERU_BACKEND=pipeline
+      # RAG retrieval tuning — adjust without redeploying code
+      # top_k: try 5, 8, 10, 20 — quality typically plateaus around 10
+      - RAG__TOP_K=${RAG__TOP_K:-10}
+      # similarity_threshold: 0.0=off, 0.3=loose filter, 0.5=strict
+      - RAG__SIMILARITY_THRESHOLD=${RAG__SIMILARITY_THRESHOLD:-0.0}
+      # neighbor_window: ±N adjacent chunks fetched per hit (1 recommended)
+      - RAG__NEIGHBOR_WINDOW=${RAG__NEIGHBOR_WINDOW:-1}
+      - HF_HOME=/app/data/.cache/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/app/data/.cache/sentence-transformers
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./processed:/app/processed
+      # Shared volume for MinerU output
+      - mineru_output:/app/data/mineru_output
+      - huggingface_cache:/app/data/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # mineru-api:  # Disabled - requires NVIDIA GPU
+      #   condition: service_started
+    networks:
+      - brain-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # MinerU API Service - CPU Version (Mac/Intel compatible)
+  # Use profile "cpu" to enable: docker-compose --profile cpu up -d
+  mineru-api-cpu:
+    profiles: ["cpu"]
+    build:
+      context: ./docker/mineru
+      dockerfile: Dockerfile.cpu
+    image: mineru-cpu:latest
+    container_name: mineru-api
+    restart: always
+    ports:
+      - "8001:8080"
+    volumes:
+      - ./uploads:/pdfs
+      - mineru_output:/output
+    environment:
+      MINERU_MODEL_SOURCE: local
+      MINERU_BACKEND: pipeline
+    networks:
+      - brain-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 16G
+        reservations:
+          cpus: '2'
+          memory: 8G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # MinerU API Service - Mac Model Runner Version (Apple Silicon recommended)
+  # Use profile "mac-modelrunner" to enable: docker compose --profile mac-modelrunner up -d
+  # Requires Docker Desktop Model Runner running a vision-capable GGUF model on host port 8001
+  mineru-api-mac-modelrunner:
+    profiles: ["mac-modelrunner"]
+    build:
+      context: ./docker/mineru
+      dockerfile: Dockerfile.cpu
+    image: mineru-cpu:latest
+    container_name: mineru-api
+    restart: always
+    ports:
+      - "8002:8080"
+    volumes:
+      - ./uploads:/pdfs
+      - mineru_output:/output
+    environment:
+      # Use MinerU HTTP client backend that talks to OpenAI-compatible server
+      MINERU_BACKEND: vlm-http-client
+      # VLM server URL (Docker Model Runner) - requires /engines/llama.cpp prefix
+      MINERU_SERVER_URL: http://model-runner.docker.internal/engines/llama.cpp
+    networks:
+      - brain-network
+    # Note: backend is passed per-request, not via CLI to avoid conflicts
+    # The VLM URL is passed via environment variable VLM_HTTP_BASE_URL
+    entrypoint: mineru-api
+    command:
+      --host 0.0.0.0
+      --port 8080
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 16G
+        reservations:
+          cpus: '2'
+          memory: 8G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # MinerU API Service - GPU Version (NVIDIA only)
+  # Use profile "gpu" to enable: docker-compose --profile gpu up -d
+  mineru-api-gpu:
+    profiles: ["gpu"]
+    build:
+      context: ./docker/mineru
+      dockerfile: Dockerfile
+    image: mineru-gpu:latest
+    container_name: mineru-api
+    restart: always
+    ports:
+      - "8001:8080"
+    volumes:
+      - ./uploads:/pdfs
+      - mineru_output:/vllm-workspace/output
+    environment:
+      MINERU_MODEL_SOURCE: local
+    entrypoint: mineru-api
+    command:
+      --host 0.0.0.0
+      --port 8080
+      # NOTE: Don't pass --backend here - it causes "multiple values for keyword argument"
+      # error in MinerU API. Pass backend via request parameter instead.
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ipc: host
+    networks:
+      - brain-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+
+  # MinerU Gradio Web UI (GPU version only)
+  # Use profile "gpu" to enable
+  mineru-gradio:
+    profiles: ["gpu"]
+    image: mineru-gpu:latest
+    container_name: mineru-gradio
+    restart: always
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./uploads:/pdfs
+      - mineru_output:/vllm-workspace/output
+    environment:
+      MINERU_MODEL_SOURCE: local
+    entrypoint: mineru-gradio
+    command:
+      --server-name 0.0.0.0
+      --server-port 7860
+      --enable-vllm-engine false
+      --enable-api true
+      --api-url http://mineru-api:8080
+    networks:
+      - brain-network
+    depends_on:
+      - mineru-api-gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: brain-mvp-postgres
+    environment:
+      - POSTGRES_DB=brain_mvp
+      - POSTGRES_USER=brain_user
+      - POSTGRES_PASSWORD=brain_password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+
+    ports:
+      - "5433:5432"
+    networks:
+      - brain-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U brain_user -d brain_mvp" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: brain-mvp-redis
+    command: redis-server --appendonly yes --requirepass redis_password
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"
+    networks:
+      - brain-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  # Shared volume for MinerU output files
+  mineru_output:
+    driver: local
+  huggingface_cache:
+    driver: local
+
+networks:
+  brain-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

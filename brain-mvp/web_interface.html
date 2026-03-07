@@ -1,0 +1,2271 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brain MVP - Document Processing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .upload-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 2px dashed #dee2e6;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: #4facfe;
+            background: #f0f8ff;
+        }
+
+        .upload-section.dragover {
+            border-color: #4facfe;
+            background: #e3f2fd;
+            transform: scale(1.02);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-button {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+
+        .upload-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(79, 172, 254, 0.3);
+        }
+
+        .process-button {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+            display: none;
+        }
+
+        .process-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(17, 153, 142, 0.3);
+        }
+
+        .process-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .file-info {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #4facfe;
+            display: none;
+        }
+
+        .status-section {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            border-left: 5px solid #4facfe;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-processing {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .results-section {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .results-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid #dee2e6;
+        }
+
+        .content-preview {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 15px 0;
+            border: 1px solid #e9ecef;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 1em;
+            line-height: 1.6;
+            color: #212529;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+            white-space: pre-wrap;
+        }
+
+        .metadata {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .metadata-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+        }
+
+        .metadata-label {
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .metadata-value {
+            color: #6c757d;
+            font-size: 1.1em;
+        }
+
+        .download-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .download-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .download-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4facfe;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .api-info {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 30px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .api-info h3 {
+            color: #1976d2;
+            margin-bottom: 10px;
+        }
+
+        .api-info a {
+            color: #1976d2;
+            text-decoration: none;
+        }
+
+        .api-info a:hover {
+            text-decoration: underline;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .tab-button {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            font-size: 1em;
+            font-weight: 600;
+            color: #6c757d;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button:hover {
+            color: #4facfe;
+        }
+
+        .tab-button.active {
+            color: #4facfe;
+            border-bottom-color: #4facfe;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Ask Tab */
+        .ask-answer-box {
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+            border: 1px solid #bae6fd;
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 20px;
+            line-height: 1.75;
+            font-size: 0.97em;
+            color: #0c4a6e;
+            white-space: pre-wrap;
+        }
+
+        .ask-answer-label {
+            font-size: 0.78em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #0284c7;
+            margin-bottom: 8px;
+        }
+
+        .ask-confidence {
+            display: inline-block;
+            background: #0284c7;
+            color: white;
+            font-size: 0.78em;
+            font-weight: 700;
+            padding: 2px 10px;
+            border-radius: 20px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .ask-sources-label {
+            font-size: 0.82em;
+            font-weight: 700;
+            color: #6c757d;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .ask-source-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-left: 4px solid #4facfe;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            font-size: 0.88em;
+        }
+
+        .ask-source-path {
+            font-family: monospace;
+            font-size: 0.82em;
+            color: #6c757d;
+            margin-bottom: 6px;
+        }
+
+        .ask-source-content {
+            color: #343a40;
+            line-height: 1.55;
+        }
+
+        .ask-limitations {
+            margin-top: 14px;
+            font-size: 0.82em;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .ask-paths {
+            margin-top: 10px;
+            font-size: 0.78em;
+            color: #94a3b8;
+        }
+
+        .ask-error {
+            background: #fff5f5;
+            border: 1px solid #fed7d7;
+            border-radius: 10px;
+            padding: 16px 20px;
+            color: #c53030;
+            font-size: 0.9em;
+        }
+
+        /* Search Tab */
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            align-items: flex-end;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            font-size: 1em;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 48px;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #4facfe;
+        }
+
+        .search-button {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .search-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.3);
+        }
+
+        .search-options {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+            font-size: 0.88em;
+            color: #6c757d;
+        }
+
+        .search-options label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .search-options input[type="number"] {
+            width: 70px;
+            padding: 4px 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 0.95em;
+        }
+
+        .search-options input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        .search-results-list {
+            display: grid;
+            gap: 12px;
+            max-height: 580px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .search-result-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 16px;
+            transition: all 0.2s;
+        }
+
+        .search-result-card:hover {
+            border-color: #4facfe;
+            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.15);
+        }
+
+        .search-result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+
+        .search-result-score {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.82em;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .search-result-meta {
+            font-size: 0.8em;
+            color: #6c757d;
+            font-family: monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .search-result-content {
+            font-size: 0.9em;
+            line-height: 1.6;
+            color: #343a40;
+            max-height: 130px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .search-result-content::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: linear-gradient(transparent, white);
+        }
+
+        .search-result-footer {
+            margin-top: 10px;
+            font-size: 0.78em;
+            color: #adb5bd;
+            font-family: monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .search-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+        }
+
+        /* Chunk Cards */
+        .chunks-grid {
+            display: grid;
+            gap: 15px;
+            max-height: 600px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .chunk-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 15px;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .chunk-card:hover {
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            border-color: #4facfe;
+        }
+
+        .chunk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 0.85em;
+            color: #6c757d;
+            border-bottom: 1px solid #f1f3f5;
+            padding-bottom: 8px;
+        }
+
+        .chunk-id {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .chunk-badges {
+            display: flex;
+            gap: 5px;
+        }
+
+        .chunk-badge {
+            font-size: 0.8em;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .chunk-badge.semantic {
+            background: #e3f2fd;
+            color: #0d47a1;
+        }
+
+        .chunk-badge.recursive {
+            background: #e8f5e9;
+            color: #1b5e20;
+        }
+
+        .chunk-content {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            color: #212529;
+        }
+
+        .chunk-enriched {
+            border-left: 4px solid #4facfe;
+            background-color: #f8fbff;
+        }
+
+        .enrichment-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #4facfe;
+            font-size: 1.2em;
+        }
+
+        /* Token Summary Panel */
+        .token-summary {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            padding: 18px 22px;
+            margin-bottom: 18px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 14px;
+        }
+
+        .token-stat-card {
+            text-align: center;
+            background: white;
+            border-radius: 8px;
+            padding: 12px 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+
+        .token-stat-card .stat-value {
+            font-size: 1.35em;
+            font-weight: 700;
+            color: #212529;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        .token-stat-card .stat-label {
+            font-size: 0.75em;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+
+        /* Per-chunk token bar */
+        .chunk-token-bar-container {
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chunk-token-bar {
+            flex: 1;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .chunk-token-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #4facfe, #00f2fe);
+            transition: width 0.3s ease;
+        }
+
+        .chunk-token-label {
+            font-size: 0.78em;
+            color: #6c757d;
+            white-space: nowrap;
+            min-width: 70px;
+            text-align: right;
+            font-family: monospace;
+        }
+
+        /* Existing Documents */
+        .existing-documents-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .existing-documents-section h2 {
+            margin-bottom: 20px;
+            color: #495057;
+        }
+
+        .documents-list {
+            display: grid;
+            gap: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .document-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .document-item:hover {
+            border-color: #4facfe;
+            box-shadow: 0 3px 10px rgba(79, 172, 254, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .document-info {
+            flex: 1;
+        }
+
+        .document-name {
+            font-weight: 600;
+            color: #212529;
+            margin-bottom: 5px;
+        }
+
+        .document-meta {
+            font-size: 0.85em;
+            color: #6c757d;
+        }
+
+        .document-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .view-button {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .view-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 10px rgba(79, 172, 254, 0.3);
+        }
+
+        .delete-button {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .delete-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 10px rgba(255, 107, 107, 0.4);
+        }
+
+        /* Abbreviations Table */
+        .abbreviations-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .abbreviations-table th,
+        .abbreviations-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .abbreviations-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+
+        .abbreviations-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .abbreviations-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .abbrev-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: 600;
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .abbrev-expansion {
+            color: #495057;
+        }
+
+        .domain-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            text-transform: uppercase;
+        }
+
+        .domain-technical {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .domain-academic {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .domain-business {
+            background: #fce4ec;
+            color: #c2185b;
+        }
+
+        .domain-general {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .confidence-bar {
+            width: 60px;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 3px;
+        }
+
+        .no-abbreviations {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .no-abbreviations-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+
+        .abbreviations-summary {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .summary-item {
+            text-align: center;
+        }
+
+        .summary-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #1976d2;
+        }
+
+        .summary-label {
+            font-size: 0.85em;
+            color: #546e7a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧠 Brain MVP</h1>
+            <p>Advanced PDF Document Processing System</p>
+        </div>
+
+        <div class="content">
+            <!-- Existing Documents Section -->
+            <div class="existing-documents-section" id="existingDocumentsSection">
+                <h2>📚 Existing Documents</h2>
+                <div id="documentsList" class="documents-list">
+                    <div style="text-align: center; padding: 20px; color: #6c757d;">
+                        Loading documents...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Section -->
+            <div class="upload-section" id="uploadSection">
+                <h2>📄 Upload Your PDF Document</h2>
+                <p style="margin: 15px 0; color: #6c757d;">
+                    Drag and drop a PDF file here, or click to select
+                </p>
+                <input type="file" id="fileInput" class="file-input" accept=".pdf" />
+                <button class="upload-button" onclick="document.getElementById('fileInput').click()">
+                    Choose PDF File
+                </button>
+                <div class="file-info" id="fileInfo">
+                    <h4>Selected File:</h4>
+                    <p id="fileName"></p>
+                    <p id="fileSize"></p>
+                    <button class="process-button" id="processButton" onclick="uploadAndProcess()">
+                        <span class="loading" id="loadingSpinner" style="display: none;"></span>
+                        Process Document
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status Section -->
+            <div class="status-section" id="statusSection">
+                <div class="status-card">
+                    <h3>📊 Processing Status</h3>
+                    <div style="margin: 15px 0;">
+                        <span class="status-badge" id="statusBadge">Pending</span>
+                        <div style="margin: 10px 0;">
+                            <strong>Document ID:</strong> <span id="documentId"></span>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div id="statusDetails"></div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section" id="resultsSection">
+                <div class="results-card">
+                    <h3>📋 Processing Results</h3>
+
+                    <div class="tabs">
+                        <button class="tab-button active" onclick="switchTab('extraction')">Extraction</button>
+                        <button class="tab-button" onclick="switchTab('chunks')">Chunks</button>
+                        <button class="tab-button" onclick="switchTab('abbreviations')">Abbreviations</button>
+                        <button class="tab-button" onclick="switchTab('summary')">Summary</button>
+                        <button class="tab-button" onclick="switchTab('search')">Search</button>
+                        <button class="tab-button" onclick="switchTab('ask')">Ask</button>
+                    </div>
+
+                    <!-- Extraction View -->
+                    <div id="extractionView" class="tab-content active">
+                        <div class="metadata" id="metadata">
+                            <!-- Metadata will be populated here -->
+                        </div>
+
+                        <h4>📝 Extracted Content Preview:</h4>
+                        <div class="content-preview" id="contentPreview">
+                            <!-- Content preview will be shown here -->
+                        </div>
+
+                        <div class="download-buttons">
+                            <button class="download-button" onclick="downloadContent('text')">
+                                📄 Download Text
+                            </button>
+                            <button class="download-button" onclick="downloadContent('json')">
+                                📊 Download JSON
+                            </button>
+                            <button class="download-button" onclick="downloadContent('markdown')">
+                                📝 Download Markdown
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Chunks View -->
+                    <div id="chunksView" class="tab-content">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h4>🧩 Document Chunks</h4>
+                            <div id="chunkStats" style="font-size: 0.9em; color: #6c757d;"></div>
+                        </div>
+                        <div class="chunks-grid" id="chunksGrid">
+                            <div style="text-align: center; padding: 20px; color: #6c757d;">
+                                Loading chunks...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Abbreviations View -->
+                    <div id="abbreviationsView" class="tab-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h4>📝 Abbreviation Expansions</h4>
+                            <div id="abbrevStats" style="font-size: 0.9em; color: #6c757d;"></div>
+                        </div>
+
+                        <div id="abbreviationsContent">
+                            <div style="text-align: center; padding: 20px; color: #6c757d;">
+                                Loading abbreviations...
+                            </div>
+                        </div>
+
+                        <div class="download-buttons" id="abbrevDownloadButtons" style="display: none; margin-top: 20px;">
+                            <button class="download-button" onclick="downloadAbbreviations('json')">
+                                📊 Download JSON
+                            </button>
+                            <button class="download-button" onclick="downloadAbbreviations('markdown')">
+                                📝 Download Markdown
+                            </button>
+                            <button class="download-button" onclick="downloadAbbreviations('full')">
+                                📄 Download Full Report
+                            </button>
+                            <button class="download-button" onclick="downloadAbbreviations('comparison')" style="background: linear-gradient(135deg, #8b5cf6, #6366f1);">
+                                🔄 Download Comparison (Pre/Post)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Ask View -->
+                    <div id="askView" class="tab-content">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+                            <span style="font-size:0.85em;color:#6c757d;font-weight:600;">Mode:</span>
+                            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85em;">
+                                <input type="radio" name="askMode" value="direct" id="modeDirectRadio" checked
+                                    onchange="updateAskModeHint()">
+                                <span style="font-weight:600;color:#4facfe;">Direct RAG</span>
+                                <span style="color:#6c757d;">(fast, ~2s)</span>
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85em;">
+                                <input type="radio" name="askMode" value="pipeline" id="modePipelineRadio"
+                                    onchange="updateAskModeHint()">
+                                <span style="font-weight:600;color:#764ba2;">Full Pipeline</span>
+                                <span style="color:#6c757d;">(deep analysis, ~2min)</span>
+                            </label>
+                        </div>
+                        <div id="askModeHint" style="font-size:0.8em;color:#adb5bd;margin-bottom:8px;">
+                            Search → GPT synthesis in one call. Best for factual questions.
+                        </div>
+                        <div class="search-bar">
+                            <textarea class="search-input" id="askQuery" rows="2"
+                                placeholder="Ask a question about your documents… (Ctrl+Enter to submit)"></textarea>
+                            <button class="search-button" onclick="askQuestion()" id="askButton">Ask</button>
+                        </div>
+                        <div id="askStatus" style="font-size:0.88em;color:#6c757d;margin-bottom:12px;"></div>
+                        <div id="askOutput">
+                            <div class="search-empty">
+                                <div style="font-size:2.5em;margin-bottom:12px;">💬</div>
+                                <p>Ask any question and get a synthesized answer grounded in your documents.</p>
+                                <p style="font-size:0.85em;margin-top:8px;color:#adb5bd;">Powered by QueryReactor on port 8000</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search View -->
+                    <div id="searchView" class="tab-content">
+                        <div class="search-bar">
+                            <textarea class="search-input" id="searchQuery" rows="2"
+                                placeholder="Ask a question or enter keywords to search across your documents…"></textarea>
+                            <button class="search-button" onclick="searchChunks()">Search</button>
+                        </div>
+                        <div class="search-options">
+                            <label>Top K: <input type="number" id="searchTopK" value="10" min="1" max="50"></label>
+                            <label>Min score: <input type="number" id="searchThreshold" value="0.0" min="0" max="1" step="0.05"></label>
+                            <label><input type="checkbox" id="searchCurrentDoc"> Limit to current document</label>
+                        </div>
+                        <div id="searchResultsStats" style="font-size:0.88em;color:#6c757d;margin-bottom:12px;"></div>
+                        <div id="searchResults" class="search-results-list">
+                            <div class="search-empty">
+                                <div style="font-size:2.5em;margin-bottom:12px;">🔍</div>
+                                <p>Enter a query above to search across your documents.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Summary View -->
+                    <div id="summaryView" class="tab-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h4>🧠 Document Summary</h4>
+                            <div id="summaryStats" style="font-size: 0.9em; color: #6c757d;"></div>
+                        </div>
+                        <div id="summaryContent">
+                            <div style="text-align: center; padding: 20px; color: #6c757d;">
+                                Loading summary...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Information -->
+            <div class="api-info">
+                <h3>🔧 Developer Resources</h3>
+                <p>
+                    <strong>API Documentation:</strong>
+                    <a href="/docs" target="_blank">Interactive Swagger UI</a>
+                </p>
+                <p>
+                    <strong>System Health:</strong>
+                    <a href="/health" target="_blank">Health Check</a>
+                </p>
+                <p>
+                    <strong>Base API URL:</strong>
+                    <code>http://localhost:8000/api/v1/</code>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDocumentId = null;
+        let currentFile = null;
+        let statusCheckInterval = null;
+
+        // Load existing documents on page load
+        window.addEventListener('DOMContentLoaded', loadExistingDocuments);
+
+        // File input handling
+        document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+
+        // Load existing documents
+        async function loadExistingDocuments() {
+            const documentsList = document.getElementById('documentsList');
+
+            try {
+                const response = await fetch('/api/v1/documents/');
+                if (!response.ok) {
+                    throw new Error(`Failed to load documents: ${response.statusText}`);
+                }
+
+                const documents = await response.json();
+
+                if (documents.length === 0) {
+                    documentsList.innerHTML = '<div style="text-align: center; padding: 20px; color: #6c757d;">No documents uploaded yet.</div>';
+                    return;
+                }
+
+                documentsList.innerHTML = documents.map(doc => {
+                    const safeFilename = (doc.filename || 'Document')
+                        .replace(/\\/g, '\\\\')
+                        .replace(/'/g, "\\'");
+                    return `
+                        <div class="document-item" onclick="viewDocument('${doc.document_id}')">
+                            <div class="document-info">
+                                <div class="document-name">${doc.filename}</div>
+                                <div class="document-meta">
+                                    ${formatFileSize(doc.file_size)} • Uploaded ${new Date(doc.upload_timestamp).toLocaleDateString()}
+                                </div>
+                            </div>
+                            <div class="document-actions">
+                                <button class="view-button" onclick="event.stopPropagation(); viewDocument('${doc.document_id}')">
+                                    View
+                                </button>
+                                <button class="delete-button" onclick="event.stopPropagation(); deleteDocument('${doc.document_id}', '${safeFilename}')">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                console.error('Error loading documents:', error);
+                documentsList.innerHTML = '<div class="error-message">Failed to load documents.</div>';
+            }
+        }
+
+        // View an existing document
+        async function viewDocument(documentId) {
+            currentDocumentId = documentId;
+
+            // Show results section
+            const resultsSection = document.getElementById('resultsSection');
+            if (resultsSection) resultsSection.style.display = 'block';
+
+            // Load document content
+            await loadResults();
+        }
+
+        async function deleteDocument(documentId, filename) {
+            const confirmed = confirm(`Delete "${filename || 'this document'}"? This will remove the stored version so you can upload it again.`);
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/documents/${documentId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        reason: 'user_request',
+                        permanent: false
+                    })
+                });
+
+                if (!response.ok) {
+                    let errorMessage = `Failed to delete document (${response.status})`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData?.detail) {
+                            errorMessage = errorData.detail;
+                        }
+                    } catch (parseError) {
+                        // Ignore JSON parsing errors for error responses
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                await response.json().catch(() => ({}));
+
+                if (currentDocumentId === documentId) {
+                    currentDocumentId = null;
+                    const statusSection = document.getElementById('statusSection');
+                    const resultsSection = document.getElementById('resultsSection');
+                    if (statusSection) statusSection.style.display = 'none';
+                    if (resultsSection) resultsSection.style.display = 'none';
+                }
+
+                await loadExistingDocuments();
+                alert(`Deleted "${filename || 'document'}". You can now upload it again.`);
+            } catch (error) {
+                showError(`Failed to delete document: ${error.message}`);
+            }
+        }
+
+        // File input handling
+
+        // Drag and drop handling
+        const uploadSection = document.getElementById('uploadSection');
+
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+
+        uploadSection.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+        });
+
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type === 'application/pdf') {
+                handleFile(files[0]);
+            } else {
+                showError('Please select a valid PDF file.');
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            if (file.type !== 'application/pdf') {
+                showError('Please select a PDF file.');
+                return;
+            }
+
+            currentFile = file;
+
+            // Show file info
+            const fileName = document.getElementById('fileName');
+            const fileSize = document.getElementById('fileSize');
+            const fileInfo = document.getElementById('fileInfo');
+            const processButton = document.getElementById('processButton');
+
+            if (fileName) fileName.textContent = file.name;
+            if (fileSize) fileSize.textContent = formatFileSize(file.size);
+            if (fileInfo) fileInfo.style.display = 'block';
+            if (processButton) processButton.style.display = 'inline-block';
+
+            // Hide previous results
+            const statusSection = document.getElementById('statusSection');
+            const resultsSection = document.getElementById('resultsSection');
+            if (statusSection) statusSection.style.display = 'none';
+            if (resultsSection) resultsSection.style.display = 'none';
+        }
+
+        async function uploadAndProcess() {
+            if (!currentFile) {
+                showError('Please select a file first.');
+                return;
+            }
+
+            const processButton = document.getElementById('processButton');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+
+            // Show loading state
+            if (processButton) {
+                processButton.disabled = true;
+                processButton.innerHTML = '<span class="loading"></span> Processing...';
+            }
+            if (loadingSpinner) {
+                loadingSpinner.style.display = 'inline-block';
+            }
+
+            try {
+                // Upload file
+                const formData = new FormData();
+                formData.append('file', currentFile);
+
+                const response = await fetch('/api/v1/documents/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    // Handle duplicate document (409 Conflict)
+                    if (response.status === 409) {
+                        const errorData = await response.json();
+                        const existingDocId = errorData.existing_document_id;
+
+                        // Show user-friendly message
+                        showError(`This document already exists in the system. Click "View" on the existing document below to see its content and chunks.`);
+
+                        // Refresh document list to show the existing document
+                        await loadExistingDocuments();
+
+                        resetProcessButton();
+                        return;
+                    }
+                    throw new Error(`Upload failed: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                currentDocumentId = result.document_id;
+
+                // Show status section
+                const documentIdElement = document.getElementById('documentId');
+                const statusSection = document.getElementById('statusSection');
+
+                if (documentIdElement) documentIdElement.textContent = currentDocumentId;
+                if (statusSection) statusSection.style.display = 'block';
+
+                // Start status monitoring
+                startStatusMonitoring();
+
+            } catch (error) {
+                showError(`Upload failed: ${error.message}`);
+                resetProcessButton();
+            }
+        }
+
+        function startStatusMonitoring() {
+            updateStatus();
+            statusCheckInterval = setInterval(updateStatus, 2000);
+        }
+
+        async function updateStatus() {
+            if (!currentDocumentId) {
+                console.warn('No document ID available for status check');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/documents/${currentDocumentId}/status`);
+                if (!response.ok) {
+                    throw new Error(`Status check failed: ${response.statusText}`);
+                }
+
+                const status = await response.json();
+
+                // Update status badge
+                const statusBadge = document.getElementById('statusBadge');
+                if (statusBadge) {
+                    statusBadge.textContent = status.status;
+                    statusBadge.className = `status-badge status-${status.status}`;
+                }
+
+                // Update progress bar
+                const progressFill = document.getElementById('progressFill');
+                if (progressFill) {
+                    progressFill.style.width = `${status.progress || 0}%`;
+                }
+
+                // Update status details
+                const statusDetails = document.getElementById('statusDetails');
+                if (statusDetails) {
+                    statusDetails.innerHTML = `
+                    <div style="margin-top: 15px;">
+                        <div><strong>Progress:</strong> ${status.progress || 0}%</div>
+                        ${status.started_at ? `<div><strong>Started:</strong> ${new Date(status.started_at).toLocaleString()}</div>` : ''}
+                        ${status.completed_at ? `<div><strong>Completed:</strong> ${new Date(status.completed_at).toLocaleString()}</div>` : ''}
+                        ${status.error_message ? `<div class="error-message"><strong>Error:</strong> ${status.error_message}</div>` : ''}
+                    </div>
+                `;
+                }
+
+                // Check if processing is complete
+                if (status.status === 'completed') {
+                    clearInterval(statusCheckInterval);
+                    await loadResults();
+                    resetProcessButton();
+                } else if (status.status === 'failed') {
+                    clearInterval(statusCheckInterval);
+                    resetProcessButton();
+                }
+
+            } catch (error) {
+                console.error('Status check error:', error);
+                showError(`Status check failed: ${error.message}`);
+                // Clear the interval on error to prevent repeated failures
+                if (statusCheckInterval) {
+                    clearInterval(statusCheckInterval);
+                    statusCheckInterval = null;
+                }
+                resetProcessButton();
+            }
+        }
+
+        async function loadResults() {
+            try {
+                const response = await fetch(`/api/v1/documents/${currentDocumentId}/content?format=json`);
+                if (!response.ok) {
+                    throw new Error(`Failed to load results: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Show results section
+                const resultsSection = document.getElementById('resultsSection');
+                if (resultsSection) resultsSection.style.display = 'block';
+
+                // Populate metadata
+                const metadata = document.getElementById('metadata');
+                const extractedContent = data.extracted_content || {};
+                const processingDetails = data.metadata?.processing_details || {};
+                const tokenStats = data.token_stats || {};
+
+                if (metadata) {
+                    metadata.innerHTML = `
+                    <div class="metadata-item">
+                        <div class="metadata-label">File Size</div>
+                        <div class="metadata-value">${formatFileSize(data.file_size || 0)}</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Text Length</div>
+                        <div class="metadata-value">${extractedContent.text_length || 0} characters</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Estimated Words</div>
+                        <div class="metadata-value">${extractedContent.estimated_words || 0}</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Estimated Paragraphs</div>
+                        <div class="metadata-value">${extractedContent.estimated_paragraphs || 0}</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Processing Method</div>
+                        <div class="metadata-value">${processingDetails.libraries_used?.join(', ') || 'Unknown'}</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Pages Processed</div>
+                        <div class="metadata-value">${processingDetails.pages_processed || 0}</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Document Tokens</div>
+                        <div class="metadata-value">${tokenStats.document_tokens?.toLocaleString() ?? '—'}</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Total Chunk Tokens</div>
+                        <div class="metadata-value">${tokenStats.chunk_tokens?.toLocaleString() ?? '—'} (${tokenStats.chunk_count || 0} chunks)</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Avg / Min / Max Tokens</div>
+                        <div class="metadata-value">${tokenStats.average_chunk_tokens?.toLocaleString() ?? '—'} / ${tokenStats.min_chunk_tokens?.toLocaleString() ?? '—'} / ${tokenStats.max_chunk_tokens?.toLocaleString() ?? '—'}</div>
+                    </div>
+                `;
+                }
+
+                // Show content preview
+                const contentPreview = document.getElementById('contentPreview');
+                if (contentPreview) {
+                    const rawText = extractedContent.raw_text || '';
+                    const preview = rawText.length > 1000 ? rawText.substring(0, 1000) + '...' : rawText;
+                    contentPreview.textContent = preview || 'No text content extracted.';
+                }
+
+            } catch (error) {
+                showError(`Failed to load results: ${error.message}`);
+            }
+        }
+
+        async function downloadContent(format) {
+            if (!currentDocumentId) return;
+
+            try {
+                const response = await fetch(`/api/v1/documents/${currentDocumentId}/content?format=${format}`);
+                if (!response.ok) {
+                    throw new Error(`Download failed: ${response.statusText}`);
+                }
+
+                let content, filename, mimeType;
+                const data = await response.json();
+
+                // Use filename from API or fallback
+                const baseFilename = data.filename || (currentFile ? currentFile.name : `document_${currentDocumentId}`);
+
+                if (format === 'json') {
+                    content = JSON.stringify(data, null, 2);
+                    filename = `${baseFilename}_extracted.json`;
+                    mimeType = 'application/json';
+                } else {
+                    if (format === 'text') {
+                        content = data.extracted_text || '';
+                        filename = `${baseFilename}_extracted.txt`;
+                        mimeType = 'text/plain';
+                    } else if (format === 'markdown') {
+                        content = data.extracted_text || ''; // API doesn't return markdown yet
+                        filename = `${baseFilename}_extracted.md`;
+                        mimeType = 'text/markdown';
+                    }
+                }
+
+                // Create and trigger download
+                const blob = new Blob([content], { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+            } catch (error) {
+                showError(`Download failed: ${error.message}`);
+            }
+        }
+
+        function resetProcessButton() {
+            const processButton = document.getElementById('processButton');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+
+            if (processButton) {
+                processButton.disabled = false;
+                processButton.innerHTML = 'Process Document';
+            }
+            if (loadingSpinner) {
+                loadingSpinner.style.display = 'none';
+            }
+        }
+
+        function showError(message) {
+            // Remove existing error messages
+            const existingErrors = document.querySelectorAll('.error-message');
+            existingErrors.forEach(error => error.remove());
+
+            // Create new error message
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+
+            // Insert after upload section
+            const uploadSection = document.getElementById('uploadSection');
+            uploadSection.parentNode.insertBefore(errorDiv, uploadSection.nextSibling);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 5000);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Tab Handling
+        function switchTab(tabName) {
+            // Update buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toLowerCase().includes(tabName)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}View`).classList.add('active');
+
+            // Load data based on tab
+            if (currentDocumentId) {
+                if (tabName === 'chunks') {
+                    loadChunks();
+                } else if (tabName === 'abbreviations') {
+                    loadAbbreviations();
+                } else if (tabName === 'summary') {
+                    loadSummary();
+                }
+            }
+        }
+
+        // Ask + Search Tab — Ctrl/Cmd+Enter submits
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('searchQuery').addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); searchChunks(); }
+            });
+            document.getElementById('askQuery').addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); askQuestion(); }
+            });
+        });
+
+        const QR_URL = 'http://localhost:8000';
+
+        function updateAskModeHint() {
+            const mode = document.querySelector('input[name="askMode"]:checked')?.value || 'direct';
+            const hint = document.getElementById('askModeHint');
+            if (mode === 'direct') {
+                hint.textContent = 'Search → GPT synthesis in one call. Best for factual questions.';
+            } else {
+                hint.textContent = 'Full M0–M12 pipeline with multi-hop reasoning. More thorough but slower.';
+            }
+        }
+
+        async function askQuestion() {
+            const question = document.getElementById('askQuery').value.trim();
+            if (!question) return;
+
+            const mode = document.querySelector('input[name="askMode"]:checked')?.value || 'direct';
+            const isDirect = mode === 'direct';
+
+            const askOutput = document.getElementById('askOutput');
+            const askStatus = document.getElementById('askStatus');
+            const askButton = document.getElementById('askButton');
+
+            askButton.disabled = true;
+            askButton.textContent = 'Thinking…';
+            askStatus.textContent = isDirect ? 'Searching knowledge base…' : 'Sending to QueryReactor pipeline…';
+            askOutput.innerHTML = '<div class="search-empty"><div style="font-size:2em;margin-bottom:8px;">⏳</div><p>Generating answer…</p></div>';
+
+            const t0 = Date.now();
+
+            try {
+                let data;
+
+                if (isDirect) {
+                    // Direct RAG: fast path
+                    const payload = { question, top_k: 10 };
+
+                    const response = await fetch(`${QR_URL}/api/ask-direct`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(errData.detail || `HTTP ${response.status}`);
+                    }
+                    const raw = await response.json();
+                    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+
+                    // Build sources HTML from direct sources
+                    let sourcesHtml = '';
+                    if (raw.sources && raw.sources.length > 0) {
+                        sourcesHtml = `<div class="ask-sources-label">Sources used (${raw.sources.length})</div>`;
+                        sourcesHtml += raw.sources.map(s => `
+                            <div class="ask-source-card">
+                                <div class="ask-source-path">${escapeHtml(s.section_path || s.doc_uuid || '')}</div>
+                                <div class="ask-source-content">${escapeHtml((s.content_preview || '').substring(0, 300))}</div>
+                                <div style="font-size:0.78em;color:#adb5bd;margin-top:4px;">score: ${s.score.toFixed(4)}</div>
+                            </div>
+                        `).join('');
+                    }
+
+                    askOutput.innerHTML = `
+                        <div class="ask-answer-label">
+                            Answer
+                            <span style="background:#d4edda;color:#155724;padding:2px 8px;border-radius:10px;font-size:0.8em;margin-left:8px;">Direct RAG</span>
+                        </div>
+                        <div class="ask-answer-box">${escapeHtml(raw.answer || 'No answer returned.')}</div>
+                        ${sourcesHtml}
+                    `;
+                    askStatus.textContent = `Answered in ${elapsed}s`;
+
+                } else {
+                    // Full pipeline: /api/qa
+                    const response = await fetch(`${QR_URL}/api/qa`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question }),
+                    });
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(errData.detail || `HTTP ${response.status}`);
+                    }
+                    data = await response.json();
+                    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+
+                    const confidence = data.confidence != null ? `${(data.confidence * 100).toFixed(0)}%` : null;
+                    const paths = data.metadata?.retrieval_paths_used?.join(', ') || '';
+                    const limitations = data.limitations?.length ? data.limitations : [];
+                    const citations = data.citations || [];
+
+                    let sourcesHtml = '';
+                    if (citations.length > 0) {
+                        sourcesHtml = `<div class="ask-sources-label">Sources used (${citations.length})</div>`;
+                        sourcesHtml += citations.map(c => `
+                            <div class="ask-source-card">
+                                <div class="ask-source-path">${escapeHtml(c.title || c.source || '')}</div>
+                                <div class="ask-source-content">${escapeHtml((c.content_preview || '').substring(0, 300))}</div>
+                            </div>
+                        `).join('');
+                    }
+
+                    askOutput.innerHTML = `
+                        <div class="ask-answer-label">
+                            Answer
+                            ${confidence ? `<span class="ask-confidence">${confidence} confidence</span>` : ''}
+                            <span style="background:#e8d5f5;color:#5a2d82;padding:2px 8px;border-radius:10px;font-size:0.8em;margin-left:4px;">Pipeline</span>
+                        </div>
+                        <div class="ask-answer-box">${escapeHtml(data.answer || 'No answer returned.')}</div>
+                        ${sourcesHtml}
+                        ${limitations.length ? `<div class="ask-limitations">⚠ ${limitations.map(l => escapeHtml(l)).join(' · ')}</div>` : ''}
+                        ${paths ? `<div class="ask-paths">Retrieval paths: ${escapeHtml(paths)}</div>` : ''}
+                    `;
+                    askStatus.textContent = `Answered in ${elapsed}s`;
+                }
+
+            } catch (error) {
+                askOutput.innerHTML = `
+                    <div class="ask-error">
+                        <strong>Could not reach QueryReactor.</strong><br>
+                        ${escapeHtml(error.message)}<br><br>
+                        Make sure QueryReactor is running: <code>python main.py server</code> in the QueryReactor directory.
+                    </div>`;
+                askStatus.textContent = '';
+            } finally {
+                askButton.disabled = false;
+                askButton.textContent = 'Ask';
+            }
+        }
+
+        async function searchChunks() {
+            const query = document.getElementById('searchQuery').value.trim();
+            if (!query) return;
+
+            const topK = parseInt(document.getElementById('searchTopK').value) || 10;
+            const threshold = parseFloat(document.getElementById('searchThreshold').value) || 0.0;
+            const limitToCurrent = document.getElementById('searchCurrentDoc').checked;
+
+            const searchResults = document.getElementById('searchResults');
+            const searchResultsStats = document.getElementById('searchResultsStats');
+
+            searchResults.innerHTML = '<div class="search-empty"><div style="font-size:2em;margin-bottom:8px;">⏳</div><p>Searching…</p></div>';
+            searchResultsStats.textContent = '';
+
+            const payload = {
+                query,
+                top_k: topK,
+                similarity_threshold: threshold,
+                neighbor_window: 1,
+            };
+            if (limitToCurrent && currentDocumentId) {
+                payload.doc_filter = currentDocumentId;
+            }
+
+            try {
+                const response = await fetch('/api/v1/chunks/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) throw new Error(`Search failed: ${response.statusText}`);
+
+                const data = await response.json();
+                const hits = data.hits || [];
+
+                searchResultsStats.textContent = `${hits.length} result${hits.length !== 1 ? 's' : ''} found`;
+
+                if (hits.length === 0) {
+                    searchResults.innerHTML = '<div class="search-empty"><div style="font-size:2.5em;margin-bottom:12px;">😶</div><p>No results found. Try a different query or lower the min score.</p></div>';
+                    return;
+                }
+
+                searchResults.innerHTML = hits.map((hit) => {
+                    const chunk = hit.chunk || {};
+                    const scorePct = ((hit.score || 0) * 100).toFixed(1);
+                    const content = (chunk.enriched_content || chunk.original_content || chunk.content || '').substring(0, 450);
+                    const section = (chunk.metadata && chunk.metadata.section_path) || '';
+                    const docId = chunk.doc_uuid || '';
+                    const chunkId = chunk.chunk_id || '';
+
+                    return `
+                        <div class="search-result-card">
+                            <div class="search-result-header">
+                                <span class="search-result-score">${scorePct}% match</span>
+                                <span class="search-result-meta">${escapeHtml(section || docId)}</span>
+                            </div>
+                            <div class="search-result-content">${escapeHtml(content)}</div>
+                            <div class="search-result-footer">
+                                doc: ${escapeHtml(docId)} &nbsp;·&nbsp; chunk: ${escapeHtml(chunkId)}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                searchResults.innerHTML = `<div class="error-message">Search failed: ${error.message}</div>`;
+            }
+        }
+
+        // Summary Handling
+        async function loadSummary() {
+            const summaryContent = document.getElementById('summaryContent');
+            const summaryStats = document.getElementById('summaryStats');
+
+            try {
+                const response = await fetch(`/api/v1/documents/${currentDocumentId}/summary`);
+                if (!response.ok) throw new Error(`Failed to load summary: ${response.statusText}`);
+
+                const data = await response.json();
+
+                if (!data.doc_summary && data.section_summaries.length === 0) {
+                    summaryContent.innerHTML = `
+                        <div style="text-align:center;padding:40px;color:#6c757d;">
+                            <div style="font-size:3em;margin-bottom:15px;">📄</div>
+                            <h4>No Summary Available</h4>
+                            <p>This document was processed without summarization, or summarization did not produce output.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                if (summaryStats) {
+                    summaryStats.textContent = `${data.section_count} section${data.section_count !== 1 ? 's' : ''}`;
+                }
+
+                let html = '';
+
+                if (data.doc_summary) {
+                    html += `
+                        <div style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);border-radius:10px;padding:20px;margin-bottom:20px;">
+                            <h5 style="margin-bottom:10px;color:#0d47a1;">📋 Document Summary</h5>
+                            <p style="line-height:1.7;color:#1a237e;">${escapeHtml(data.doc_summary)}</p>
+                        </div>
+                    `;
+                }
+
+                if (data.section_summaries.length > 0) {
+                    html += `<h5 style="margin-bottom:12px;color:#495057;">Section Summaries</h5>`;
+                    for (const sec of data.section_summaries) {
+                        html += `
+                            <div style="background:white;border:1px solid #dee2e6;border-radius:8px;padding:15px;margin-bottom:12px;">
+                                ${sec.section_path ? `<div style="font-size:0.8em;color:#6c757d;margin-bottom:6px;font-family:monospace;">${escapeHtml(sec.section_path)}</div>` : ''}
+                                <p style="line-height:1.6;color:#343a40;margin:0;">${escapeHtml(sec.summary)}</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                summaryContent.innerHTML = html;
+
+            } catch (error) {
+                console.error('Error loading summary:', error);
+                summaryContent.innerHTML = `<div class="error-message">Failed to load summary: ${error.message}</div>`;
+            }
+        }
+
+        // Abbreviation Handling
+        async function loadAbbreviations() {
+            const abbreviationsContent = document.getElementById('abbreviationsContent');
+            const abbrevStats = document.getElementById('abbrevStats');
+            const abbrevDownloadButtons = document.getElementById('abbrevDownloadButtons');
+
+            try {
+                const response = await fetch(`/api/v1/documents/${currentDocumentId}/abbreviations`);
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        abbreviationsContent.innerHTML = `
+                            <div class="no-abbreviations">
+                                <div class="no-abbreviations-icon">📝</div>
+                                <h4>No Abbreviation Data</h4>
+                                <p>Abbreviation expansion data is not available for this document.</p>
+                                <p style="font-size: 0.9em; margin-top: 10px;">This may happen if the document was processed before abbreviation expansion was enabled.</p>
+                            </div>
+                        `;
+                        if (abbrevDownloadButtons) abbrevDownloadButtons.style.display = 'none';
+                        return;
+                    }
+                    throw new Error(`Failed to load abbreviations: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Update stats
+                if (abbrevStats) {
+                    abbrevStats.textContent = `${data.expansion_count || 0} abbreviations expanded`;
+                }
+
+                // Handle no expansions
+                if (!data.expansions || data.expansions.length === 0) {
+                    abbreviationsContent.innerHTML = `
+                        <div class="no-abbreviations">
+                            <div class="no-abbreviations-icon">✅</div>
+                            <h4>No Abbreviations Found</h4>
+                            <p>This document did not contain any abbreviations that needed expansion.</p>
+                        </div>
+                    `;
+                    if (abbrevDownloadButtons) abbrevDownloadButtons.style.display = 'none';
+                    return;
+                }
+
+                // Count domains
+                const domainCounts = {};
+                data.expansions.forEach(exp => {
+                    const domain = exp.domain || 'general';
+                    domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+                });
+
+                // Build summary
+                let summaryHtml = `
+                    <div class="abbreviations-summary">
+                        <div class="summary-item">
+                            <div class="summary-value">${data.expansion_count}</div>
+                            <div class="summary-label">Total Expanded</div>
+                        </div>
+                `;
+
+                Object.entries(domainCounts).forEach(([domain, count]) => {
+                    summaryHtml += `
+                        <div class="summary-item">
+                            <div class="summary-value">${count}</div>
+                            <div class="summary-label">${domain}</div>
+                        </div>
+                    `;
+                });
+
+                summaryHtml += '</div>';
+
+                // Build table
+                let tableHtml = `
+                    <table class="abbreviations-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Abbreviation</th>
+                                <th>Expansion</th>
+                                <th>Domain</th>
+                                <th>Confidence</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                data.expansions.forEach((exp, index) => {
+                    const confidencePercent = Math.round((exp.confidence || 0) * 100);
+                    const domain = exp.domain || 'general';
+
+                    tableHtml += `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td><span class="abbrev-badge">${escapeHtml(exp.abbreviation)}</span></td>
+                            <td class="abbrev-expansion">${escapeHtml(exp.expansion)}</td>
+                            <td><span class="domain-badge domain-${domain}">${domain}</span></td>
+                            <td>
+                                <div class="confidence-bar">
+                                    <div class="confidence-fill" style="width: ${confidencePercent}%"></div>
+                                </div>
+                                ${confidencePercent}%
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                tableHtml += '</tbody></table>';
+
+                abbreviationsContent.innerHTML = summaryHtml + tableHtml;
+
+                // Show download buttons
+                if (abbrevDownloadButtons) abbrevDownloadButtons.style.display = 'flex';
+
+            } catch (error) {
+                console.error('Error loading abbreviations:', error);
+                abbreviationsContent.innerHTML = `<div class="error-message">Failed to load abbreviations: ${error.message}</div>`;
+            }
+        }
+
+        async function downloadAbbreviations(type) {
+            if (!currentDocumentId) return;
+
+            try {
+                let url, filename, mimeType, content;
+
+                if (type === 'json') {
+                    const response = await fetch(`/api/v1/documents/${currentDocumentId}/abbreviations?format=json`);
+                    const data = await response.json();
+                    content = JSON.stringify(data, null, 2);
+                    filename = `${data.filename || 'document'}_abbreviations.json`;
+                    mimeType = 'application/json';
+                } else if (type === 'markdown') {
+                    const response = await fetch(`/api/v1/documents/${currentDocumentId}/abbreviations?format=markdown`);
+                    const data = await response.json();
+                    content = data.markdown;
+                    filename = `${data.filename || 'document'}_abbreviations.md`;
+                    mimeType = 'text/markdown';
+                } else if (type === 'full') {
+                    // Download full report with expanded text
+                    const response = await fetch(`/api/v1/documents/${currentDocumentId}/abbreviations/download?include_full_text=true`);
+                    if (!response.ok) throw new Error('Download failed');
+
+                    const blob = await response.blob();
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    filename = contentDisposition
+                        ? contentDisposition.split('filename=')[1]
+                        : 'abbreviations_report.md';
+
+                    const downloadUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(downloadUrl);
+                    return;
+                } else if (type === 'comparison') {
+                    // Download comparison report with pre and post expansion text
+                    const response = await fetch(`/api/v1/documents/${currentDocumentId}/abbreviations/download?include_comparison=true`);
+                    if (!response.ok) throw new Error('Download failed');
+
+                    const blob = await response.blob();
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    filename = contentDisposition
+                        ? contentDisposition.split('filename=')[1].replace('.md', '_comparison.md')
+                        : 'abbreviations_comparison.md';
+
+                    const downloadUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(downloadUrl);
+                    return;
+                }
+
+                // Create and trigger download for JSON/Markdown
+                const blob = new Blob([content], { type: mimeType });
+                const downloadUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(downloadUrl);
+
+            } catch (error) {
+                showError(`Download failed: ${error.message}`);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Chunk Handling
+        async function loadChunks() {
+            const chunksGrid = document.getElementById('chunksGrid');
+            const chunkStats = document.getElementById('chunkStats');
+
+            try {
+                const response = await fetch(`/api/v1/chunks/document/${currentDocumentId}`);
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        chunksGrid.innerHTML = '<div style="text-align: center; padding: 20px;">No chunks found for this document.</div>';
+                        return;
+                    }
+                    throw new Error(`Failed to load chunks: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const chunks = data.chunks || [];
+
+                // Calculate token statistics
+                const tokenCounts = chunks.map(c => c.token_count || c.metadata?.token_count || 0);
+                const totalTokens = tokenCounts.reduce((a, b) => a + b, 0);
+                const avgTokens = chunks.length ? Math.round(totalTokens / chunks.length) : 0;
+                const minTokens = tokenCounts.length ? Math.min(...tokenCounts) : 0;
+                const maxTokens = tokenCounts.length ? Math.max(...tokenCounts) : 0;
+
+                // Update stats header
+                if (chunkStats) {
+                    chunkStats.textContent = `${chunks.length} chunks | ${totalTokens.toLocaleString()} total tokens`;
+                }
+
+                // Render chunks
+                if (chunks.length === 0) {
+                    chunksGrid.innerHTML = '<div style="text-align: center; padding: 20px;">No chunks generated.</div>';
+                    return;
+                }
+
+                // Build token summary panel + chunk cards
+                const summaryHtml = `
+                    <div class="token-summary">
+                        <div class="token-stat-card">
+                            <div class="stat-value">${totalTokens.toLocaleString()}</div>
+                            <div class="stat-label">Total Tokens</div>
+                        </div>
+                        <div class="token-stat-card">
+                            <div class="stat-value">${chunks.length}</div>
+                            <div class="stat-label">Chunks</div>
+                        </div>
+                        <div class="token-stat-card">
+                            <div class="stat-value">${avgTokens.toLocaleString()}</div>
+                            <div class="stat-label">Avg Tokens</div>
+                        </div>
+                        <div class="token-stat-card">
+                            <div class="stat-value">${minTokens.toLocaleString()}</div>
+                            <div class="stat-label">Min Tokens</div>
+                        </div>
+                        <div class="token-stat-card">
+                            <div class="stat-value">${maxTokens.toLocaleString()}</div>
+                            <div class="stat-label">Max Tokens</div>
+                        </div>
+                    </div>
+                `;
+
+                const chunkCardsHtml = chunks.map(chunk => {
+                    const chunkType = (chunk.chunk_type || chunk.metadata?.chunk_type || 'unknown').toString();
+                    const wordCount = chunk.metadata?.word_count || chunk.word_count || 0;
+                    const chunkStrategy = chunk.chunking_strategy || 'n/a';
+                    const isEnriched = Boolean(chunk.enriched_content);
+                    const chunkContent = chunk.content || chunk.original_content || chunk.enriched_content || '';
+                    const tokenCount = chunk.token_count || chunk.metadata?.token_count || 0;
+                    const barPercent = maxTokens > 0 ? Math.round((tokenCount / maxTokens) * 100) : 0;
+
+                    return `
+                        <div class="chunk-card ${isEnriched ? 'chunk-enriched' : ''}">
+                            <div class="chunk-header">
+                                <span class="chunk-id">#${chunk.chunk_index}</span>
+                                <div class="chunk-badges">
+                                    <span class="chunk-badge ${chunkType.toLowerCase()}">${chunkType}</span>
+                                    <span class="chunk-badge">${chunkStrategy}</span>
+                                    <span class="chunk-badge">${wordCount} words</span>
+                                </div>
+                            </div>
+                            <div class="chunk-content">${chunkContent}</div>
+                            <div class="chunk-token-bar-container">
+                                <div class="chunk-token-bar">
+                                    <div class="chunk-token-bar-fill" style="width: ${barPercent}%"></div>
+                                </div>
+                                <span class="chunk-token-label">${tokenCount.toLocaleString()} tokens</span>
+                            </div>
+                            ${isEnriched ? '<div class="enrichment-indicator" title="Enriched Content">✨</div>' : ''}
+                        </div>
+                    `;
+                }).join('');
+
+                chunksGrid.innerHTML = summaryHtml + chunkCardsHtml;
+
+            } catch (error) {
+                console.error('Error loading chunks:', error);
+                chunksGrid.innerHTML = `<div class="error-message">Failed to load chunks: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+
+</html>
