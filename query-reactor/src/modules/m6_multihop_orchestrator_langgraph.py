@@ -6,10 +6,7 @@ from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
-import re
-
 from ..models import ReactorState, WorkUnit, EvidenceItem
-from ..services.brain_retriever import brain_retriever
 from .base import LLMModule
 
 
@@ -90,13 +87,12 @@ class MultihopOrchestratorLangGraph(LLMModule):
             return state
         
         try:
-            # Call pipeline nodes directly (avoids LangGraph sub-graph dict serialization issues)
-            result_state = await self._analyze_complexity_node(state)
-            result_state = await self._plan_hops_node(result_state)
-            result_state = await self._execute_hop_node(result_state)
-            result_state = await self._synthesize_results_node(result_state)
-            result_state = await self._validate_reasoning_node(result_state)
-
+            thread_config = {"configurable": {"thread_id": str(uuid4())}}
+            result_state = await self.graph.ainvoke(state, config=thread_config)
+            
+            if not isinstance(result_state, ReactorState):
+                result_state = state
+            
             hop_count = getattr(result_state, 'total_hops_executed', 0)
             self._log_execution_end(result_state, f"Multi-hop orchestration: {hop_count} hops executed")
             
@@ -228,119 +224,17 @@ Return JSON with:
             return self._fallback_hop_plan(analysis)
     
     async def _execute_reasoning_hops(self, plan: HopPlan, state: ReactorState) -> List[HopExecution]:
-        """Execute reasoning hops.
-
-        When brain-mvp is reachable, performs 2-hop semantic retrieval.
-        Falls back to the LLM-based single-hop simulation otherwise.
-        """
-        # Identify the WorkUnit being processed (first in state for P3)
-        workunit = state.workunits[0] if state.workunits else None
-        if workunit is None:
-            return []
-
-        executions = await self._execute_brain_mvp_hops(workunit, state)
-        if executions:
-            return executions
-
-        # Fallback: LLM-simulated hops (no brain-mvp)
-        fallback_executions = []
+        """Execute individual reasoning hops according to plan."""
+        executions = []
+        
         for i, (hop_step, query) in enumerate(zip(plan.hop_sequence, plan.intermediate_queries)):
             execution = await self._execute_single_hop(hop_step, query, i, state)
-            fallback_executions.append(execution)
+            executions.append(execution)
+            
+            # Check if we need to continue
             if not execution.next_hop_needed:
                 break
-        return fallback_executions
-
-    async def _execute_brain_mvp_hops(
-        self, workunit: WorkUnit, state: ReactorState
-    ) -> List[HopExecution]:
-        """2-hop retrieval over brain-mvp.
-
-        Hop 1: search with the original query.
-        Hop 2: search with the original query enriched with concepts from hop-1 results.
-        Returns [] if brain-mvp is unavailable or returns no results.
-        """
-        router_decision_id = str(uuid4())
-        if hasattr(state, "route_plans") and state.route_plans:
-            for rp in state.route_plans:
-                if rp.workunit_id == workunit.id:
-                    router_decision_id = rp.router_decision_id
-                    break
-
-        # --- Hop 1 ---
-        hop1_hits = await brain_retriever.search(workunit.text, top_k=5)
-        if not hop1_hits:
-            return []
-
-        hop1_items: List[EvidenceItem] = []
-        for hit in hop1_hits:
-            item = brain_retriever.to_evidence_item(
-                hit, workunit, router_decision_id, retrieval_path="P3"
-            )
-            # Tag hop number in section_title
-            item = item.model_copy(update={"section_title": f"[hop:1] {item.section_title or ''}"})
-            hop1_items.append(item)
-            state.add_evidence(item)
-
-        # --- Concept extraction from hop-1 content (simple noun-phrase heuristic) ---
-        combined_text = " ".join(
-            (hit.get("enriched_content") or hit.get("original_content") or "")
-            for hit in hop1_hits[:3]
-        )
-        # Extract capitalized multi-word sequences and standalone long words
-        noun_phrases = re.findall(r"\b[A-Z][a-zA-Z]{3,}(?:\s+[A-Z][a-zA-Z]{3,})*\b", combined_text)
-        # Also grab frequent long lowercase words (skip common stop words)
-        _stop = {"that", "this", "with", "from", "have", "been", "they", "their", "which", "when"}
-        freq_words = [
-            w for w in re.findall(r"\b[a-z]{5,}\b", combined_text.lower())
-            if w not in _stop
-        ]
-        # Deduplicate and take top concepts
-        seen: set[str] = set()
-        concepts: List[str] = []
-        for phrase in noun_phrases + freq_words:
-            key = phrase.lower()
-            if key not in seen:
-                seen.add(key)
-                concepts.append(phrase)
-            if len(concepts) >= 5:
-                break
-
-        # --- Hop 2 ---
-        hop2_query = f"{workunit.text} {' '.join(concepts)}"
-        hop2_hits = await brain_retriever.search(hop2_query, top_k=5)
-
-        hop2_items: List[EvidenceItem] = []
-        hop1_chunk_ids = {item.provenance.chunk_id for item in hop1_items}
-        for hit in hop2_hits:
-            if hit.get("chunk_id") in hop1_chunk_ids:
-                continue  # deduplicate
-            item = brain_retriever.to_evidence_item(
-                hit, workunit, router_decision_id, retrieval_path="P3"
-            )
-            item = item.model_copy(update={"section_title": f"[hop:2] {item.section_title or ''}"})
-            hop2_items.append(item)
-            state.add_evidence(item)
-
-        # Build HopExecution records
-        executions = [
-            HopExecution(
-                hop_id=f"hop_1_{str(uuid4())[:8]}",
-                query_executed=workunit.text,
-                evidence_found=len(hop1_items),
-                reasoning_result=f"Hop 1 retrieved {len(hop1_items)} chunks from brain-mvp",
-                next_hop_needed=True,
-                confidence=0.8,
-            ),
-            HopExecution(
-                hop_id=f"hop_2_{str(uuid4())[:8]}",
-                query_executed=hop2_query,
-                evidence_found=len(hop2_items),
-                reasoning_result=f"Hop 2 retrieved {len(hop2_items)} additional chunks using concepts: {', '.join(concepts[:3])}",
-                next_hop_needed=False,
-                confidence=0.8,
-            ),
-        ]
+        
         return executions
     
     async def _execute_single_hop(self, hop_step: str, query: str, 

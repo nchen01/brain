@@ -71,10 +71,3 @@ ia.log_level = "INFO"
 api.host = "0.0.0.0"
 api.port = 8000
 api.workers = 4
-
-## Brain-MVP Integration
-brain_mvp.api_url = "http://localhost:8088"
-brain_mvp.top_k = 10
-brain_mvp.similarity_threshold = 0.0
-brain_mvp.neighbor_window = 1
-brain_mvp.timeout_ms = 5000

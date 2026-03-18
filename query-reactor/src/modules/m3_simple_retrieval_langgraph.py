@@ -9,7 +9,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from ..models import ReactorState, EvidenceItem, Provenance, WorkUnit
 from ..models.state import PathStats
 from ..models.types import SourceType
-from ..services.brain_retriever import brain_retriever
 from .base import LLMModule
 import time
 
@@ -112,11 +111,17 @@ class SimpleRetrievalLangGraph(LLMModule):
                 }
             }
             
-            # Call pipeline nodes directly (avoids LangGraph sub-graph dict serialization issues)
-            result_state = await self._analyze_query_node(state)
-            result_state = await self._select_sources_node(result_state)
-            result_state = await self._retrieve_data_node(result_state)
-            result_state = await self._validate_results_node(result_state)
+            result_state = await self.graph.ainvoke(state, config=thread_config)
+            
+            # Ensure we have a proper ReactorState object
+            if not isinstance(result_state, ReactorState):
+                # If LangGraph returned a dict, convert back to ReactorState
+                if isinstance(result_state, dict):
+                    # Copy the original state and update with new data
+                    result_state = state.model_copy()
+                    # The workflow should have updated the state in-place
+                else:
+                    result_state = state
             
             # Record path statistics
             execution_time = (time.time() - start_time) * 1000
@@ -286,81 +291,47 @@ Return a JSON object with:
             # Fallback source selection
             return self._fallback_source_selection(analysis)
     
-    async def _retrieve_from_sources(self, workunit: WorkUnit, selection: SourceSelection,
+    async def _retrieve_from_sources(self, workunit: WorkUnit, selection: SourceSelection, 
                                    state: ReactorState) -> RetrievalResults:
-        """Retrieve data from selected sources.
-
-        Tries brain-mvp first; falls back to heuristic template data if unavailable.
-        """
-        # --- Primary path: brain-mvp semantic search ---
-        top_k = self._get_config("brain_mvp.top_k", 10)
-        hits = await brain_retriever.search(workunit.text, top_k=top_k)
-
-        if hits:
-            router_decision_id = self._get_router_decision_id(state, workunit.id)
-            evidence_items = []
-            for hit in hits:
-                meta = hit.get("metadata") or {}
-                section_path = meta.get("section_path", "")
-                content = hit.get("enriched_content") or hit.get("original_content") or " "
-                evidence_items.append({
-                    "id": hit.get("doc_uuid", str(uuid4())),
-                    "source_id": hit.get("doc_uuid", ""),
-                    "chunk_id": hit.get("chunk_id", ""),
-                    "title": section_path or hit.get("doc_uuid", ""),
-                    "content": content,
-                    "score": float(hit.get("score", 0.0)),
-                    "metadata": {
-                        "source_type": "db",
-                        "confidence": float(hit.get("score", 0.0)),
-                        "relevance": float(hit.get("score", 0.0)),
-                        "brain_mvp": True,
-                    },
-                })
-            return RetrievalResults(
-                evidence_items=evidence_items,
-                retrieval_stats={"sources_queried": 1, "total_results": len(evidence_items), "source": "brain_mvp"},
-                source_coverage={"brain_mvp": len(evidence_items)},
-                total_results=len(evidence_items),
-                confidence=0.9,
-            )
-
-        # --- Fallback: heuristic template data ---
+        """Retrieve data from selected sources."""
+        # Get configuration
         max_results_per_source = self._get_config("sr.max_results_per_source", 3)
-
+        
         evidence_items = []
         source_coverage = {}
-
+        
+        # Retrieve from each selected source
         for source_id in selection.selected_sources:
             priority = selection.source_priorities.get(source_id, 0.5)
             max_results = max(1, int(max_results_per_source * priority))
-
+            
             source_results = await self._retrieve_from_single_source(
                 workunit, source_id, max_results
             )
-
+            
             evidence_items.extend(source_results)
             source_coverage[source_id] = len(source_results)
-
+        
+        # Calculate overall confidence based on results and expectations
         total_results = len(evidence_items)
         expected_results = selection.expected_results
-
+        
         if expected_results > 0:
             coverage_ratio = min(1.0, total_results / expected_results)
             confidence = (coverage_ratio * 0.7) + (selection.confidence * 0.3)
         else:
             confidence = 0.5 if total_results > 0 else 0.1
-
+        
         return RetrievalResults(
             evidence_items=evidence_items,
             retrieval_stats={
                 "sources_queried": len(selection.selected_sources),
                 "total_results": total_results,
-                "avg_results_per_source": total_results / len(selection.selected_sources) if selection.selected_sources else 0,
+                "avg_results_per_source": total_results / len(selection.selected_sources) if selection.selected_sources else 0
             },
             source_coverage=source_coverage,
             total_results=total_results,
-            confidence=confidence,
+            confidence=confidence
         )
     
     async def _retrieve_from_single_source(self, workunit: WorkUnit, source_id: str, 
@@ -620,16 +591,15 @@ Return a JSON object with:
             "detail_level": detail_level
         }
     
-    def _create_evidence_item_from_data(self, evidence_data: Dict[str, Any],
+    def _create_evidence_item_from_data(self, evidence_data: Dict[str, Any], 
                                       workunit: WorkUnit, state: ReactorState) -> EvidenceItem:
         """Create EvidenceItem from retrieved data."""
-        # Prefer explicit chunk_id (set by brain-mvp path); fall back to derived value
-        chunk_id = evidence_data.get("chunk_id") or f"chunk_{evidence_data['id'][:8]}"
+        # Create provenance
         provenance = Provenance(
             source_type=SourceType.db,
             source_id=evidence_data["source_id"],
             doc_id=evidence_data["id"],
-            chunk_id=chunk_id,
+            chunk_id=f"chunk_{evidence_data['id'][:8]}",
             retrieval_path=self.path_id,
             router_decision_id=self._get_router_decision_id(state, workunit.id)
         )

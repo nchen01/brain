@@ -374,9 +374,3 @@ Focus on recent, authoritative sources and provide diverse perspectives."""
 
 # Global instance
 m5_internet_retrieval = M5InternetRetrievalLangGraph()
-
-
-# LangGraph node function for integration
-async def internet_retrieval_lg(state: ReactorState) -> ReactorState:
-    """LangGraph node for M5 - Internet Retrieval."""
-    return await m5_internet_retrieval.execute(state)

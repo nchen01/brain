@@ -102,14 +102,14 @@ class InteractionAnswerLangGraph(LLMModule):
             # Add routing context to state for processing
             state.routing_context = routing_context
             
-            # Call pipeline nodes directly (avoids LangGraph sub-graph dict serialization issues)
-            result_state = await self._format_answer_node(state)
-            result_state = await self._add_metadata_node(result_state)
-            result_state = await self._validate_output_node(result_state)
-            result_state = await self._deliver_response_node(result_state)
-
+            thread_config = {"configurable": {"thread_id": str(uuid4())}}
+            result_state = await self.graph.ainvoke(state, config=thread_config)
+            
+            if not isinstance(result_state, ReactorState):
+                result_state = state
+            
             delivery_status = getattr(result_state, 'delivery_response', {}).get('delivery_status', 'unknown')
-            answer_length = len(result_state.final_answer.text) if result_state.final_answer else 0
+            answer_length = len(result_state.final_answer) if result_state.final_answer else 0
             
             self._log_execution_end(result_state, f"Answer delivered: {delivery_status}, length: {answer_length}, context: {routing_context['scenario']}")
             

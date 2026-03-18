@@ -5,8 +5,8 @@ from .m0_qa_human_langgraph import qa_with_human_lg
 from .m1_query_preprocessor_langgraph import query_preprocessor_lg
 from .m2_query_router_langgraph import query_router_lg
 from .m3_simple_retrieval_langgraph import simple_retrieval_lg
-from .m4_retrieval_quality_check_langgraph import m4_quality_check, retrieval_quality_check_lg
-from .m5_internet_retrieval_langgraph import m5_internet_retrieval, internet_retrieval_lg
+from .m4_retrieval_quality_check_langgraph import m4_quality_check
+from .m5_internet_retrieval_langgraph import m5_internet_retrieval
 from .m6_multihop_orchestrator_langgraph import multihop_orchestrator_lg
 from .m7_evidence_aggregator_langgraph import evidence_aggregator_lg
 from .m8_reranker_langgraph import reranker_lg
@@ -35,8 +35,8 @@ qa_with_human = qa_with_human_lg
 query_preprocessor = query_preprocessor_lg
 query_router = query_router_lg
 simple_retrieval = simple_retrieval_lg
-retrieval_quality_check = retrieval_quality_check_lg
-internet_retrieval = internet_retrieval_lg
+retrieval_quality_check = m4_quality_check
+internet_retrieval = m5_internet_retrieval
 multihop_orchestrator = multihop_orchestrator_lg
 evidence_aggregator = evidence_aggregator_lg
 reranker = reranker_lg

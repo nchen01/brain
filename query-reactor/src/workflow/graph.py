@@ -1,45 +1,13 @@
 """LangGraph workflow orchestration for QueryReactor system."""
 
-from typing import Dict, Any, List, Callable
+from typing import Dict, Any, List
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 import time
-import functools
 
 from ..models import ReactorState
 from ..models.core import HistoryTurn
 from ..models.types import Role
-
-
-def _coerce_state(state) -> ReactorState:
-    """Convert a dict (LangGraph 1.x internal representation) back to ReactorState."""
-    if isinstance(state, ReactorState):
-        return state
-    if isinstance(state, dict):
-        try:
-            return ReactorState.model_validate(state)
-        except Exception:
-            pass
-    return state
-
-
-def _node(fn: Callable) -> Callable:
-    """Wrap a node function so dict state is coerced to ReactorState before the call."""
-    if not callable(fn):
-        return fn
-
-    @functools.wraps(fn)
-    async def _async_wrapper(state):
-        return await fn(_coerce_state(state))
-
-    @functools.wraps(fn)
-    def _sync_wrapper(state):
-        return fn(_coerce_state(state))
-
-    import asyncio
-    if asyncio.iscoroutinefunction(fn):
-        return _async_wrapper
-    return _sync_wrapper
 from ..modules import (
     qa_with_human, query_preprocessor, query_router,
     simple_retrieval, internet_retrieval, multihop_orchestrator,
@@ -132,27 +100,26 @@ class QueryReactorGraph:
         workflow = StateGraph(ReactorState)
         
         # Add nodes for each module with history tracking
-        # All wrapped with _node() to coerce dict→ReactorState (LangGraph 1.x compat)
-        workflow.add_node("initialize_history", _node(self._initialize_history_node))
-        workflow.add_node("m0_qa_human", _node(self._m0_with_history))
-        workflow.add_node("m1_query_preprocessor", _node(query_preprocessor))
-        workflow.add_node("m2_query_router", _node(query_router))
-
+        workflow.add_node("initialize_history", self._initialize_history_node)
+        workflow.add_node("m0_qa_human", self._m0_with_history)
+        workflow.add_node("m1_query_preprocessor", query_preprocessor)
+        workflow.add_node("m2_query_router", query_router)
+        
         # Retrieval path nodes
-        workflow.add_node("m3_simple_retrieval", _node(simple_retrieval))
-        workflow.add_node("m5_internet_retrieval", _node(internet_retrieval))
-        workflow.add_node("m6_multihop_orchestrator", _node(multihop_orchestrator))
-        workflow.add_node("m4_quality_check", _node(retrieval_quality_check))
-
+        workflow.add_node("m3_simple_retrieval", simple_retrieval)
+        workflow.add_node("m5_internet_retrieval", internet_retrieval)
+        workflow.add_node("m6_multihop_orchestrator", multihop_orchestrator)
+        workflow.add_node("m4_quality_check", retrieval_quality_check)
+        
         # Evidence processing nodes
-        workflow.add_node("m7_evidence_aggregator", _node(evidence_aggregator))
-        workflow.add_node("m8_reranker", _node(reranker))
-        workflow.add_node("m9_smart_controller", _node(smart_retrieval_controller))
-
+        workflow.add_node("m7_evidence_aggregator", evidence_aggregator)
+        workflow.add_node("m8_reranker", reranker)
+        workflow.add_node("m9_smart_controller", smart_retrieval_controller)
+        
         # Answer generation nodes
-        workflow.add_node("m10_answer_creator", _node(answer_creator))
-        workflow.add_node("m11_answer_check", _node(answer_check))
-        workflow.add_node("m12_interaction_answer", _node(self._m12_with_history))
+        workflow.add_node("m10_answer_creator", answer_creator)
+        workflow.add_node("m11_answer_check", answer_check)
+        workflow.add_node("m12_interaction_answer", self._m12_with_history)
         
         # Define the workflow edges
         self._add_edges(workflow)
@@ -174,7 +141,7 @@ class QueryReactorGraph:
         workflow.add_edge("m1_query_preprocessor", "m2_query_router")
         
         # Router to parallel retrieval execution
-        workflow.add_node("parallel_retrieval", _node(self._parallel_retrieval_node))
+        workflow.add_node("parallel_retrieval", self._parallel_retrieval_node)
         workflow.add_edge("m2_query_router", "parallel_retrieval")
         
         # Parallel retrieval directly to aggregator (quality check integrated)
@@ -217,28 +184,29 @@ class QueryReactorGraph:
         from ..modules.m2d5_path_coordinator import path_coordinator
         return await path_coordinator.execute_parallel_paths(state)
     
-    def _smart_controller_routing(self, state) -> str:
+    def _smart_controller_routing(self, state: ReactorState) -> str:
         """Route based on SmartRetrieval Controller decision."""
-        state = _coerce_state(state)
-        decision = getattr(state, 'smr_decision', None)
-        if decision == "answer_ready":
-            return "answer"
-        elif decision == "needs_better_decomposition":
-            return "refine"
-        elif decision == "insufficient_evidence":
-            return "terminate"
+        # Check if we have a decision in state
+        if hasattr(state, 'smr_decision'):
+            decision = state.smr_decision
+            if decision == "answer_ready":
+                return "answer"
+            elif decision == "needs_better_decomposition":
+                return "refine"
+            else:  # insufficient_evidence
+                return "terminate"
+        
         # Default to answer creation if no explicit decision
         return "answer"
     
-    def _answer_check_routing(self, state) -> str:
+    def _answer_check_routing(self, state: ReactorState) -> str:
         """Route based on answer verification result."""
-        state = _coerce_state(state)
         # Check verification result in state
-        result = getattr(state, 'verification_result', None)
-        if result is not None:
-            if getattr(result, 'is_valid', True):
+        if hasattr(state, 'verification_result'):
+            result = state.verification_result
+            if result.is_valid:
                 return "deliver"
-            elif "regenerate" in getattr(result, 'suggestions', []):
+            elif "regenerate" in result.suggestions:
                 return "regenerate"
             else:
                 return "refine_query"
@@ -288,9 +256,8 @@ class QueryReactorGraph:
             initial_state,
             config=thread_config
         )
-
-        # LangGraph 1.x may return a dict; coerce back to ReactorState
-        return _coerce_state(result)
+        
+        return result
     
     def get_graph_visualization(self) -> str:
         """Get a text representation of the graph structure."""

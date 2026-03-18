@@ -112,10 +112,12 @@ class AnswerCheckLangGraph(LLMModule):
             state.m11_return_attempts = 0
         
         try:
-            # Call pipeline nodes directly (avoids LangGraph sub-graph dict serialization issues)
-            result_state = await self._validate_retrieval_node(state)
-            result_state = await self._make_gatekeeper_decision_node(result_state)
-
+            thread_config = {"configurable": {"thread_id": str(uuid4())}}
+            result_state = await self.graph.ainvoke(state, config=thread_config)
+            
+            if not isinstance(result_state, ReactorState):
+                result_state = state
+            
             # Get gatekeeper decision
             decision = getattr(result_state, 'gatekeeper_decision', None)
             if decision:
@@ -145,19 +147,16 @@ class AnswerCheckLangGraph(LLMModule):
     async def _validate_retrieval_node(self, state: ReactorState) -> ReactorState:
         """Validate that the answer is based on retrieval data."""
         try:
-            # Extract text string from Answer object if needed
-            answer_text = state.final_answer.text if hasattr(state.final_answer, 'text') else str(state.final_answer)
-            validation = await self._validate_retrieval_compliance(answer_text, state)
+            validation = await self._validate_retrieval_compliance(state.final_answer, state)
             state.retrieval_validation = validation
             return state
         except Exception as e:
             self.logger.error(f"[{self.module_code}] Retrieval validation failed: {e}")
             print(f"🔄 FALLBACK TRIGGERED: M11 Retrieval Validation - {e}")
             print(f"   → Using fallback validation")
-
+            
             # Fallback validation
-            answer_text = state.final_answer.text if hasattr(state.final_answer, 'text') else str(state.final_answer)
-            state.retrieval_validation = self._fallback_retrieval_validation(answer_text, state)
+            state.retrieval_validation = self._fallback_retrieval_validation(state.final_answer, state)
             return state
     
     async def _make_gatekeeper_decision_node(self, state: ReactorState) -> ReactorState:

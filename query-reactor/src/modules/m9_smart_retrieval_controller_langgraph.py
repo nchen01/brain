@@ -59,8 +59,8 @@ class SmartRetrievalControllerLangGraph(LLMModule):
         super().__init__("M9_LG", "src.model")
         self.graph = None
         self.checkpointer = MemorySaver()
-        self.max_turns = 1  # Maximum retrieval turns before giving up
-        self.quality_threshold = 0.05  # Minimum quality threshold for "good enough"
+        self.max_turns = 3  # Maximum retrieval turns before giving up
+        self.quality_threshold = 0.7  # Minimum quality threshold for "good enough"
         self._build_graph()
     
     def _build_graph(self) -> None:
@@ -92,18 +92,9 @@ class SmartRetrievalControllerLangGraph(LLMModule):
             # Make routing decision based on 3-path logic
             routing_decision = self._make_routing_decision(assessment, state)
             state.routing_decision = routing_decision
-
-            # Set smr_decision field expected by graph.py routing function
-            next_module = routing_decision.get("next_module", "M12")
-            if next_module == "M10":
-                state.smr_decision = "answer_ready"
-            elif next_module == "M1":
-                state.smr_decision = "needs_better_decomposition"
-            else:
-                state.smr_decision = "insufficient_evidence"
-
+            
             self._log_execution_end(state, f"Routing decision: {routing_decision['next_module']} - {routing_decision['reason']}")
-
+            
             return state
             
         except Exception as e:

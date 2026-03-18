@@ -109,52 +109,7 @@ class FeedbackRequest(BaseModel):
 
 class FeedbackResponse(BaseModel):
     """Feedback response model."""
-
+    
     success: bool = Field(..., description="Whether feedback was recorded successfully")
     message: str = Field(..., description="Response message")
     timestamp: int = Field(default_factory=lambda: int(time.time() * 1000), description="Response timestamp")
-
-
-class QARequest(BaseModel):
-    """Request model for the /api/qa endpoint."""
-
-    question: str = Field(..., description="The user's question")
-    user_id: Optional[UUID] = Field(None, description="User identifier (generated if not provided)")
-    locale: Optional[str] = Field(None, description="Language/locale code (e.g., 'en-US')")
-
-
-class QAResponse(QueryResponse):
-    """Response model for the /api/qa endpoint — extends QueryResponse with doc_sources."""
-
-    doc_sources: List[str] = Field(
-        default_factory=list,
-        description="Unique doc_uuid values from all evidence provenance (brain-mvp document IDs)",
-    )
-
-
-class DirectAskRequest(BaseModel):
-    """Request model for the /api/ask-direct endpoint."""
-
-    question: str = Field(..., description="The user's question")
-    top_k: int = Field(10, description="Number of chunks to retrieve from brain-mvp")
-    doc_filter: Optional[str] = Field(None, description="Limit search to a specific doc_uuid")
-
-
-class DirectChunkSource(BaseModel):
-    """A single chunk used as source in the direct RAG response."""
-
-    chunk_id: str
-    doc_uuid: str
-    score: float
-    section_path: Optional[str] = None
-    content_preview: str
-
-
-class DirectAskResponse(BaseModel):
-    """Response model for the /api/ask-direct endpoint."""
-
-    query_id: str
-    answer: str
-    sources: List[DirectChunkSource] = Field(default_factory=list)
-    doc_sources: List[str] = Field(default_factory=list, description="Unique doc_uuid values")
-    timestamp: int = Field(default_factory=lambda: int(time.time() * 1000))

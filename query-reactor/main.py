@@ -2,14 +2,7 @@
 
 import asyncio
 import sys
-import io
 from pathlib import Path
-
-# Ensure stdout/stderr handle Unicode on Windows (avoids emoji encoding crashes)
-if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-if sys.stderr.encoding and sys.stderr.encoding.lower() not in ('utf-8', 'utf8'):
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # Add src to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))

@@ -108,21 +108,24 @@ class QueryRouterLangGraph(LLMModule):
             router_stats = RouterStats()
             state.router_stats = router_stats
             state.routing_start_time = start_time
-
-            # Call pipeline nodes directly (avoids LangGraph sub-graph dict serialization issues)
-            state = await self._analyze_workunits_node(state)
-            state = await self._route_workunits_node(state)
-            state = await self._optimize_routing_node(state)
-            state = await self._finalize_routes_node(state)
-
+            
+            # Execute the LangGraph workflow
+            thread_config = {
+                "configurable": {
+                    "thread_id": str(uuid4())
+                }
+            }
+            
+            result_state = await self.graph.ainvoke(state, config=thread_config)
+            
             # Finalize statistics
-            if hasattr(state, 'router_stats') and state.router_stats:
-                state.router_stats.routing_time_ms = (time.time() - start_time) * 1000
-
-            unique_paths = self._get_unique_paths(state.route_plans)
-            self._log_execution_end(state, f"Routed to paths: {unique_paths}")
-
-            return state
+            if hasattr(result_state, 'router_stats') and result_state.router_stats:
+                result_state.router_stats.routing_time_ms = (time.time() - start_time) * 1000
+            
+            unique_paths = self._get_unique_paths(result_state.route_plans)
+            self._log_execution_end(result_state, f"Routed to paths: {unique_paths}")
+            
+            return result_state
             
         except Exception as e:
             self._log_error(state, e)
@@ -144,8 +147,10 @@ class QueryRouterLangGraph(LLMModule):
     
     async def _analyze_workunits_node(self, state: ReactorState) -> ReactorState:
         """LangGraph node for analyzing WorkUnits before routing."""
+        # Ensure we have a proper ReactorState object
         if isinstance(state, dict):
-            state = self._coerce_ainvoke_result(state, state)  # coerce dict → ReactorState
+            self.logger.warning(f"[{self.module_code}] Received dict instead of ReactorState in analyze node")
+            return state
         
         # Store workunit analysis for routing decisions
         workunit_analyses = {}
@@ -159,8 +164,10 @@ class QueryRouterLangGraph(LLMModule):
     
     async def _route_workunits_node(self, state: ReactorState) -> ReactorState:
         """LangGraph node for routing WorkUnits with LLM-based decisions."""
+        # Ensure we have a proper ReactorState object
         if isinstance(state, dict):
-            state = self._coerce_ainvoke_result(state, state)  # coerce dict → ReactorState
+            self.logger.warning(f"[{self.module_code}] Received dict instead of ReactorState in route node")
+            return state
         
         max_parallel_paths = self._get_config("router.max_parallel_paths", 3)
         routing_decisions = []
@@ -174,8 +181,10 @@ class QueryRouterLangGraph(LLMModule):
     
     async def _optimize_routing_node(self, state: ReactorState) -> ReactorState:
         """LangGraph node for optimizing routing decisions."""
+        # Ensure we have a proper ReactorState object
         if isinstance(state, dict):
-            state = self._coerce_ainvoke_result(state, state)  # coerce dict → ReactorState
+            self.logger.warning(f"[{self.module_code}] Received dict instead of ReactorState in optimize node")
+            return state
         
         # Analyze routing decisions for optimization opportunities
         routing_decisions = getattr(state, 'routing_decisions', [])
@@ -194,8 +203,10 @@ class QueryRouterLangGraph(LLMModule):
     
     async def _finalize_routes_node(self, state: ReactorState) -> ReactorState:
         """LangGraph node for finalizing route plans."""
+        # Ensure we have a proper ReactorState object
         if isinstance(state, dict):
-            state = self._coerce_ainvoke_result(state, state)  # coerce dict → ReactorState
+            self.logger.warning(f"[{self.module_code}] Received dict instead of ReactorState in finalize node")
+            return state
         
         routing_decisions = getattr(state, 'routing_decisions', [])
         route_plans = []

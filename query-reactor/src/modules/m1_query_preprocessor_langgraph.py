@@ -546,13 +546,9 @@ class QueryPreprocessorLangGraph(LLMModule):
                 }
             }
             
-            # Call pipeline nodes directly (avoids LangGraph sub-graph dict serialization issues)
-            self.logger.debug(f"[{self.module_code}] About to run M1 pipeline nodes directly")
-            result_state = await self._normalize_query_node(state)
-            result_state = await self._resolve_references_node(result_state)
-            result_state = await self._decompose_query_node(result_state)
-            result_state = await self._create_workunits_node(result_state)
-            self.logger.debug(f"[{self.module_code}] M1 pipeline nodes completed, state type: {type(result_state)}")
+            self.logger.debug(f"[{self.module_code}] About to invoke LangGraph with state type: {type(state)}")
+            result_state = await self.graph.ainvoke(state, config=thread_config)
+            self.logger.debug(f"[{self.module_code}] LangGraph returned state type: {type(result_state)}")
             
             # Add current query to history if needed (avoiding duplication)
             if getattr(result_state, '_needs_history_update', False):
@@ -616,8 +612,11 @@ class QueryPreprocessorLangGraph(LLMModule):
     
     async def _normalize_query_node(self, state: ReactorState) -> ReactorState:
         """Modernized normalization node with structured output."""
+        # Ensure we have a proper ReactorState object
         if isinstance(state, dict):
-            state = self._coerce_ainvoke_result(state, state)  # coerce dict → ReactorState
+            self.logger.warning(f"[{self.module_code}] Received dict instead of ReactorState in normalization node")
+            # This shouldn't happen, but let's handle it gracefully
+            return state
         
         # Validate and prepare state
         StateValidator.validate_state_type(state)
@@ -687,8 +686,10 @@ class QueryPreprocessorLangGraph(LLMModule):
     
     async def _resolve_references_node(self, state: ReactorState) -> ReactorState:
         """Modernized reference resolution node with proper conversation context."""
+        # Ensure we have a proper ReactorState object
         if isinstance(state, dict):
-            state = self._coerce_ainvoke_result(state, state)  # coerce dict → ReactorState
+            self.logger.warning(f"[{self.module_code}] Received dict instead of ReactorState in reference resolution node")
+            return state
         
         # Validate and prepare state
         StateValidator.validate_state_type(state)
@@ -764,8 +765,10 @@ class QueryPreprocessorLangGraph(LLMModule):
     
     async def _decompose_query_node(self, state: ReactorState) -> ReactorState:
         """Modernized decomposition node with conversation context awareness."""
+        # Ensure we have a proper ReactorState object
         if isinstance(state, dict):
-            state = self._coerce_ainvoke_result(state, state)  # coerce dict → ReactorState
+            self.logger.warning(f"[{self.module_code}] Received dict instead of ReactorState in decomposition node")
+            return state
         
         # Validate and prepare state
         StateValidator.validate_state_type(state)
@@ -902,8 +905,10 @@ Respond with JSON: {{"should_decompose": true/false, "sub_questions": ["q1", "q2
     
     async def _create_workunits_node(self, state: ReactorState) -> ReactorState:
         """Updated WorkUnit creation node with modernized compatibility."""
+        # Ensure we have a proper ReactorState object
         if isinstance(state, dict):
-            state = self._coerce_ainvoke_result(state, state)  # coerce dict → ReactorState
+            self.logger.warning(f"[{self.module_code}] Received dict instead of ReactorState in create workunits node")
+            return state
         
         # Validate state
         StateValidator.validate_state_type(state)

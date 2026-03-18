@@ -85,12 +85,12 @@ class EvidenceAggregatorLangGraph(LLMModule):
             return state
         
         try:
-            # Call pipeline nodes directly (avoids LangGraph sub-graph dict serialization issues)
-            result_state = await self._collect_evidence_node(state)
-            result_state = await self._deduplicate_node(result_state)
-            result_state = await self._merge_sources_node(result_state)
-            result_state = await self._validate_consistency_node(result_state)
-
+            thread_config = {"configurable": {"thread_id": str(uuid4())}}
+            result_state = await self.graph.ainvoke(state, config=thread_config)
+            
+            if not isinstance(result_state, ReactorState):
+                result_state = state
+            
             final_count = len(result_state.evidences)
             original_count = getattr(result_state, 'original_evidence_count', final_count)
             self._log_execution_end(result_state, f"Aggregated evidence: {original_count} → {final_count}")

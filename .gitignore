@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Environments
+.env
+.venv
+venv/
+env/
+
+# Data / large artifacts (not for source control)
+data/
+logs/
+uploads/
+processed/
+*.db
+*.sqlite
+*.sqlite3
+vdb_*.json
+graph_*.graphml
+lightrag/
+mineru_output/
+
+# Test artifacts
+.coverage
+.pytest_cache/
+htmlcov/
+*.xml
+*.cover
+.hypothesis/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+
+# Secrets
+.env.local
+.env.production
+config/secrets.json
+
+# Misc
+*.tmp
+*.temp
+*.bak
+*.log
+nul

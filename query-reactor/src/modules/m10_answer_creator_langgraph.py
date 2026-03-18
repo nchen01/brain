@@ -93,13 +93,8 @@ class AnswerCreatorLangGraph(LLMModule):
                 }
             }
             
-            # Call pipeline nodes directly (avoids LangGraph sub-graph dict serialization issues)
-            result_state = await self._analyze_evidence_node(state)
-            result_state = await self._plan_answers_node(result_state)
-            result_state = await self._generate_content_node(result_state)
-            result_state = await self._synthesize_answer_node(result_state)
-            result_state = await self._validate_answer_node(result_state)
-
+            result_state = await self.graph.ainvoke(state, config=thread_config)
+            
             citation_count = len(result_state.final_answer.citations) if result_state.final_answer else 0
             self._log_execution_end(result_state, f"Created answer with {citation_count} citations")
             

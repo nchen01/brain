@@ -84,17 +84,6 @@ class BaseModule(ABC):
             self.logger.warning(f"[{self.module_code}] Failed to load configuration: {e}")
             # Continue execution - modules should handle missing config gracefully
     
-    def _coerce_ainvoke_result(self, result, fallback_state: "ReactorState") -> "ReactorState":
-        """Coerce LangGraph ainvoke result back to ReactorState (LG 1.x returns dicts)."""
-        if isinstance(result, ReactorState):
-            return result
-        if isinstance(result, dict):
-            try:
-                return ReactorState.model_validate(result)
-            except Exception:
-                pass
-        return fallback_state
-
     def _validate_module_prompts(self) -> None:
         """Validate that required prompts are loaded for this module."""
         # Define required prompts per module

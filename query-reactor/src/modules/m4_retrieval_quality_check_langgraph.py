@@ -247,21 +247,15 @@ class M4QualityCheckLangGraph(LLMModule):
         """Create fallback assessment data with default values."""
         print(f"🔄 EXECUTING FALLBACK: M4 Assessment Data - Using default quality scores")
         return {
-            'relevance_score': 0.7,
-            'credibility_score': 0.7,
-            'recency_score': 0.7,
-            'completeness_score': 0.7,
-            'overall_score': 0.7,
-            'reasoning': 'Fallback assessment due to LLM failure - keeping evidence conservatively',
+            'relevance_score': 0.5,
+            'credibility_score': 0.5,
+            'recency_score': 0.5,
+            'completeness_score': 0.5,
+            'overall_score': 0.5,
+            'reasoning': 'Fallback assessment due to LLM failure',
             'should_keep': True  # Conservative approach - keep evidence when unsure
         }
 
 
 # Global instance
 m4_quality_check = M4QualityCheckLangGraph()
-
-
-# LangGraph node function for integration
-async def retrieval_quality_check_lg(state: ReactorState) -> ReactorState:
-    """LangGraph node for M4 - Retrieval Quality Check."""
-    return await m4_quality_check.execute(state)

@@ -149,12 +149,12 @@ class ReRankerLangGraph(LLMModule):
             return state
         
         try:
-            # Call pipeline nodes directly (avoids LangGraph sub-graph dict serialization issues)
-            result_state = await self._analyze_evidence_node(state)
-            result_state = await self._calculate_scores_node(result_state)
-            result_state = await self._apply_ranking_node(result_state)
-            result_state = await self._validate_ranking_node(result_state)
-
+            thread_config = {"configurable": {"thread_id": str(uuid4())}}
+            result_state = await self.graph.ainvoke(state, config=thread_config)
+            
+            if not isinstance(result_state, ReactorState):
+                result_state = state
+            
             # Sort evidence by final scores
             if hasattr(result_state, 'evidence_scores'):
                 score_map = {score.evidence_id: score.composite_score 
@@ -281,6 +281,26 @@ Total items: {len(state.evidences)}
             print(f"   → Using heuristic scoring for evidence {evidence.id}")
             # Fallback to heuristic scoring
             return self._fallback_evidence_scoring(evidence, state, strategy)
+            relevance_score * weights["relevance"] +
+            quality_score * weights["quality"] +
+            credibility_score * weights["credibility"] +
+            recency_score * weights["recency"] +
+            completeness_score * weights["completeness"]
+        )
+        
+        # Update evidence score
+        evidence.score_raw = composite_score
+        
+        return EvidenceScoring(
+            evidence_id=str(evidence.id),
+            relevance_score=relevance_score,
+            quality_score=quality_score,
+            credibility_score=credibility_score,
+            recency_score=recency_score,
+            completeness_score=completeness_score,
+            composite_score=composite_score,
+            confidence=0.85
+        )
     
     async def _apply_ranking_algorithm(self, evidence_scores: List[EvidenceScoring], 
                                      state: ReactorState) -> RankingCalculation:

@@ -11,11 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .models import (
-    QueryRequest, QueryResponse, ErrorResponse, HealthResponse,
+    QueryRequest, QueryResponse, ErrorResponse, HealthResponse, 
     MetricsResponse, FeedbackRequest, FeedbackResponse,
-    CitationResponse, ProcessingMetadata, VerificationInfo,
-    QARequest, QAResponse,
-    DirectAskRequest, DirectAskResponse, DirectChunkSource,
+    CitationResponse, ProcessingMetadata, VerificationInfo
 )
 from ..models import UserQuery, ContextBundle
 from ..workflow.graph import query_reactor_graph
@@ -81,22 +79,6 @@ class QueryReactorService:
         async def get_query_status(query_id: str):
             """Get status of a specific query (for long-running queries)."""
             return await self._get_query_status(query_id)
-
-        @self.app.post("/api/ask-direct", response_model=DirectAskResponse)
-        async def ask_direct(request: DirectAskRequest):
-            """Direct RAG endpoint: brain-mvp search → GPT synthesis, no pipeline."""
-            return await self._direct_rag(request)
-
-        @self.app.post("/api/qa", response_model=QAResponse)
-        async def qa_query(request: QARequest, background_tasks: BackgroundTasks):
-            """QA endpoint backed by brain-mvp knowledge base."""
-            query_request = QueryRequest(
-                text=request.question,
-                user_id=request.user_id,
-                locale=request.locale,
-            )
-            base_response = await self._process_query(query_request, background_tasks)
-            return await self._create_qa_response(base_response)
         
         # Error handlers
         @self.app.exception_handler(HTTPException)
@@ -215,9 +197,8 @@ class QueryReactorService:
         
         # Format citations
         citations = []
-        formatted_answer = getattr(state, 'formatted_answer', None)
-        if formatted_answer and isinstance(formatted_answer, dict) and formatted_answer.get('citations'):
-            for citation_data in formatted_answer['citations']:
+        if hasattr(state, 'formatted_answer') and state.formatted_answer.get('citations'):
+            for citation_data in state.formatted_answer['citations']:
                 citations.append(CitationResponse(**citation_data))
         
         # Create metadata
@@ -230,12 +211,11 @@ class QueryReactorService:
         
         # Create verification info if available
         verification = None
-        verification_result = getattr(state, 'verification_result', None)
-        if verification_result is not None:
+        if hasattr(state, 'verification_result'):
             verification = VerificationInfo(
-                is_valid=getattr(verification_result, 'is_valid', True),
-                confidence=getattr(verification_result, 'confidence', 1.0),
-                issues_count=len(verification_result.issues) if getattr(verification_result, 'issues', None) else 0
+                is_valid=state.verification_result.is_valid,
+                confidence=state.verification_result.confidence,
+                issues_count=len(state.verification_result.issues) if state.verification_result.issues else 0
             )
         
         return QueryResponse(
@@ -326,128 +306,6 @@ class QueryReactorService:
             "errors": metrics.errors
         }
     
-    async def _create_qa_response(self, base: QueryResponse) -> QAResponse:
-        """Wrap a QueryResponse as a QAResponse, adding doc_sources."""
-        # Collect unique source_ids from citations (set by brain-mvp provenance)
-        doc_sources = list(dict.fromkeys(
-            c.source for c in base.citations
-            if c.source_type == "db" and c.source
-        ))
-        return QAResponse(
-            query_id=base.query_id,
-            answer=base.answer,
-            confidence=base.confidence,
-            citations=base.citations,
-            limitations=base.limitations,
-            metadata=base.metadata,
-            verification=base.verification,
-            timestamp=base.timestamp,
-            doc_sources=doc_sources,
-        )
-
-    async def _direct_rag(self, request: DirectAskRequest) -> DirectAskResponse:
-        """Direct RAG: retrieve chunks from brain-mvp then synthesize with GPT in one call."""
-        from uuid import uuid4 as _uuid4
-        from ..services.brain_retriever import brain_retriever
-
-        query_id = str(_uuid4())
-
-        # 1. Retrieve chunks from brain-mvp
-        hits = await brain_retriever.search(
-            query=request.question,
-            top_k=request.top_k,
-            doc_filter=request.doc_filter,
-        )
-
-        if not hits:
-            return DirectAskResponse(
-                query_id=query_id,
-                answer="No relevant documents found in the knowledge base. Please upload documents first.",
-                sources=[],
-                doc_sources=[],
-            )
-
-        # 2. Build context from top chunks
-        context_parts = []
-        sources = []
-        seen_chunks = set()
-        for hit in hits:
-            chunk = hit.get("chunk", hit)  # brain-mvp wraps hit under "chunk" key
-            chunk_id = chunk.get("chunk_id") or hit.get("chunk_id", "")
-            if chunk_id in seen_chunks:
-                continue
-            seen_chunks.add(chunk_id)
-
-            doc_uuid = chunk.get("doc_uuid") or hit.get("doc_uuid", "")
-            score = float(hit.get("score", 0.0))
-            metadata = chunk.get("metadata") or hit.get("metadata") or {}
-            section_path = metadata.get("section_path", "")
-            content = (
-                chunk.get("enriched_content")
-                or chunk.get("original_content")
-                or hit.get("enriched_content")
-                or hit.get("original_content")
-                or ""
-            )
-
-            if not content:
-                continue
-
-            context_parts.append(
-                f"[Source: {section_path or doc_uuid}]\n{content}"
-            )
-            sources.append(DirectChunkSource(
-                chunk_id=chunk_id,
-                doc_uuid=doc_uuid,
-                score=score,
-                section_path=section_path or None,
-                content_preview=content[:300],
-            ))
-
-        if not context_parts:
-            return DirectAskResponse(
-                query_id=query_id,
-                answer="Retrieved chunks had no content. Please check that documents are processed.",
-                sources=[],
-                doc_sources=[],
-            )
-
-        context_text = "\n\n---\n\n".join(context_parts)
-
-        # 3. Synthesize with GPT
-        system_prompt = (
-            "You are a helpful assistant that answers questions based strictly on the provided document excerpts. "
-            "Always ground your answer in the sources below. If the answer is not in the sources, say so clearly."
-        )
-        user_prompt = (
-            f"Document excerpts:\n\n{context_text}\n\n"
-            f"Question: {request.question}\n\n"
-            "Answer:"
-        )
-
-        try:
-            from langchain_openai import ChatOpenAI
-            from langchain_core.messages import HumanMessage, SystemMessage
-
-            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.0, max_tokens=1024)
-            response = await llm.ainvoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt),
-            ])
-            answer_text = response.content.strip()
-        except Exception as e:
-            logger.error(f"Direct RAG LLM call failed: {e}")
-            raise HTTPException(status_code=500, detail=f"LLM synthesis failed: {e}")
-
-        doc_sources = list(dict.fromkeys(s.doc_uuid for s in sources if s.doc_uuid))
-
-        return DirectAskResponse(
-            query_id=query_id,
-            answer=answer_text,
-            sources=sources,
-            doc_sources=doc_sources,
-        )
-
     async def _cleanup_query_data(self, query_id: str) -> None:
         """Cleanup query-specific data (background task)."""
         
